@@ -1,13 +1,12 @@
 # ImageConverter
 
-ImageConverter est une application GUI simple conçue pour convertir des images entre différents formats. Actuellement, elle prend en charge la conversion d'images vers les formats JPEG, PNG et WEBP.
+ImageConverter est une application GUI simple conçue pour convertir des images entre différents formats. Actuellement, elle prend en charge la conversion d'images vers les formats JPEG et WEBP.
 
 ## Fonctionnalités
 
 Convertissez facilement vos images avec un simple drag-and-drop en formats :
 - JPEG ;
 - WEBP ;
-- PNG.
 
 ## Prérequis
 
