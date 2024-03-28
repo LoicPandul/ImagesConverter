@@ -1,2 +1,2 @@
 Pillow
-tkinterdnd2
+PyQt5
