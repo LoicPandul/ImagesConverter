@@ -2,13 +2,12 @@
 
 ImagesConverter est une application GUI simple en python conçue pour convertir des images entre différents formats par drag-and-drop. Ce n'est pas un logiciel de dingue, mais c'est un petit outil que j'avais fait pour moi afin de gagner en productivité, et si ça peut vous être utile à vous aussi, tant mieux ! Je vais essayer d'améliorer l'application au fur et à mesure.
 
-Actuellement, elle prend en charge la conversion d'images vers les formats JPEG et WEBP.
-
 ## Fonctionnalités
 
 Convertissez facilement vos images avec un simple drag-and-drop en formats :
 - JPEG ;
 - WEBP ;
+- PNG.
 
 ## Prérequis
 
