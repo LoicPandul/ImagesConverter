@@ -10,7 +10,7 @@ def convert_to_jpeg(image_paths, gui_instance):
         try:
             file_name = os.path.basename(image_path)
             if not os.path.isfile(image_path) or is_same_format('jpeg', image_path):
-                continue  # Ignore les fichiers inexistants ou déjà au bon format
+                continue 
 
             with Image.open(image_path) as image:
                 if image.mode in ("RGBA", "LA"):

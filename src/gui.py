@@ -60,9 +60,8 @@ class ImageConverterGUI(QMainWindow):
         self.drop_label = DragDropLabel(self)
         layout.addWidget(self.drop_label)
 
-        # Utilisez un QTextEdit pour afficher les messages comme un terminal
         self.message_terminal = QTextEdit()
-        self.message_terminal.setReadOnly(True)  # Empêche l'édition du texte
+        self.message_terminal.setReadOnly(True) 
         layout.addWidget(self.message_terminal)
 
         central_widget = QWidget()
@@ -70,7 +69,7 @@ class ImageConverterGUI(QMainWindow):
         self.setCentralWidget(central_widget)
 
     def append_message(self, message):
-        self.message_terminal.append(message)  # Ajoute le message au terminal
+        self.message_terminal.append(message) 
 
     def set_conversion_mode(self, mode):
         self.conversion_mode = mode
@@ -81,7 +80,7 @@ class ImageConverterGUI(QMainWindow):
             self.btn_to_webp.setStyleSheet("background-color: #F2B807; color: black;")
         elif mode == 'png':
             self.btn_to_png.setStyleSheet("background-color: #F2B807; color: black;")
-        self.append_message(f"Mode set to {mode}")
+        self.append_message(f"Mode paramétré : to {mode}")
 
     def reset_button_styles(self):
         self.btn_to_jpeg.setStyleSheet("")
@@ -89,7 +88,7 @@ class ImageConverterGUI(QMainWindow):
         self.btn_to_png.setStyleSheet("")
 
     def convert_image(self, image_path):
-        file_name = os.path.basename(image_path)  # Nom du fichier pour les messages
+        file_name = os.path.basename(image_path)
         try:
             if self.conversion_mode == 'jpeg':
                 convert_to_jpeg([image_path], self)
@@ -98,11 +97,9 @@ class ImageConverterGUI(QMainWindow):
             elif self.conversion_mode == 'png':
                 convert_to_png([image_path], self)
 
-            # Confirmation de la conversion ici, après la conversion réussie
-            self.append_message(f"Le fichier {file_name} a été converti avec succès en {self.conversion_mode.upper()}.")
+            self.append_message(f"Le fichier {file_name} a été converti en {self.conversion_mode.upper()}.")
         except Exception as e:
             self.append_message(f"Une erreur est survenue lors de la conversion de {file_name}: {str(e)}")
-
 
 
 if __name__ == "__main__":
