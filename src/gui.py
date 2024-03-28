@@ -54,20 +54,19 @@ class ImageConverterGUI(TkinterDnD.Tk):
     def set_conversion_mode(self, mode):
         self.conversion_mode = mode
         text_mode = f"to {mode.upper()}"
+
+        self.reset_button_colors()
+
         if mode == 'jpeg':
             self.btn_to_jpeg.config(**self.active_button_jpeg_style)
-            self.btn_to_webp.config(**self.button_style)
             self.drop_label.config(text=f"Drag and drop files here ({text_mode})", image=self.image_icon, compound='top', bg=self.color_to_jpeg, fg='white')
         elif mode == 'png':
             self.btn_to_png.config(**self.active_button_png_style)
-            self.btn_to_jpeg.config(**self.button_style)
-            self.btn_to_webp.config(**self.button_style)
             self.drop_label.config(text=f"Drag and drop files here ({text_mode})", image=self.image_icon, compound='top', bg=self.color_to_png, fg='white')
-        else:  
+        else:  # 'webp'
             self.btn_to_webp.config(**self.active_button_webp_style)
-            self.btn_to_jpeg.config(**self.button_style)
             self.drop_label.config(text=f"Drag and drop files here ({text_mode})", image=self.image_icon, compound='top', bg=self.color_to_webp, fg='black')
- 
+
 
     def reset_button_colors(self):
         self.btn_to_jpeg.config(**self.button_style)
