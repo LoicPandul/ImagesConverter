@@ -1,7 +1,8 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit, QLabel
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent
 import sys
+import os
 
 from .image_processing import convert_to_jpeg, convert_to_webp, convert_to_png
 
@@ -38,7 +39,7 @@ class ImageConverterGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Image Converter")
-        self.setGeometry(100, 100, 400, 600) 
+        self.setGeometry(100, 100, 400, 600)
 
         self.conversion_mode = None
 
@@ -59,9 +60,17 @@ class ImageConverterGUI(QMainWindow):
         self.drop_label = DragDropLabel(self)
         layout.addWidget(self.drop_label)
 
+        # Utilisez un QTextEdit pour afficher les messages comme un terminal
+        self.message_terminal = QTextEdit()
+        self.message_terminal.setReadOnly(True)  # Empêche l'édition du texte
+        layout.addWidget(self.message_terminal)
+
         central_widget = QWidget()
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
+
+    def append_message(self, message):
+        self.message_terminal.append(message)  # Ajoute le message au terminal
 
     def set_conversion_mode(self, mode):
         self.conversion_mode = mode
@@ -72,7 +81,7 @@ class ImageConverterGUI(QMainWindow):
             self.btn_to_webp.setStyleSheet("background-color: #F2B807; color: black;")
         elif mode == 'png':
             self.btn_to_png.setStyleSheet("background-color: #F2B807; color: black;")
-        print(f"Mode set to {mode}")
+        self.append_message(f"Mode set to {mode}")
 
     def reset_button_styles(self):
         self.btn_to_jpeg.setStyleSheet("")
@@ -80,16 +89,24 @@ class ImageConverterGUI(QMainWindow):
         self.btn_to_png.setStyleSheet("")
 
     def convert_image(self, image_path):
-        if self.conversion_mode == 'jpeg':
-            convert_to_jpeg([image_path], None)
-        elif self.conversion_mode == 'webp':
-            convert_to_webp([image_path], None)
-        elif self.conversion_mode == 'png':
-            convert_to_png([image_path], None)
+        file_name = os.path.basename(image_path)  # Nom du fichier pour les messages
+        try:
+            if self.conversion_mode == 'jpeg':
+                convert_to_jpeg([image_path], self)
+            elif self.conversion_mode == 'webp':
+                convert_to_webp([image_path], self)
+            elif self.conversion_mode == 'png':
+                convert_to_png([image_path], self)
+
+            # Confirmation de la conversion ici, après la conversion réussie
+            self.append_message(f"Le fichier {file_name} a été converti avec succès en {self.conversion_mode.upper()}.")
+        except Exception as e:
+            self.append_message(f"Une erreur est survenue lors de la conversion de {file_name}: {str(e)}")
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ImageConverterGUI()
     window.show()
     sys.exit(app.exec_())
-

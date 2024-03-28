@@ -7,58 +7,47 @@ def is_same_format(target_format, image_path):
 
 def convert_to_jpeg(image_paths, gui_instance):
     for image_path in image_paths:
-        if not os.path.isfile(image_path):
-            print(f"The file {image_path} does not exist.")
-            continue
-        
-        if is_same_format('jpeg', image_path):
-            print(f"The file {image_path} is already in JPEG format, no conversion necessary.")
-            continue
+        try:
+            file_name = os.path.basename(image_path)
+            if not os.path.isfile(image_path) or is_same_format('jpeg', image_path):
+                continue  # Ignore les fichiers inexistants ou déjà au bon format
 
-        with Image.open(image_path) as image:
-            if image.mode in ("RGBA", "LA"):
-                image = image.convert("RGB")
-            image_output_path = os.path.splitext(image_path)[0] + '.jpeg'
-            image.save(image_output_path, 'JPEG')
-            print(f"{image_path} has been converted to {image_output_path}.")
+            with Image.open(image_path) as image:
+                if image.mode in ("RGBA", "LA"):
+                    image = image.convert("RGB")
+                image_output_path = os.path.splitext(image_path)[0] + '.jpeg'
+                image.save(image_output_path, 'JPEG')
 
-        os.remove(image_path)
-        print(f"{image_path} has been deleted.")
+            os.remove(image_path)
+        except Exception as e:
+            gui_instance.append_message(f"Échec de la conversion de {file_name} en JPEG. Erreur : {e}")
 
 def convert_to_webp(image_paths, gui_instance):
     for image_path in image_paths:
-        if not os.path.isfile(image_path):
-            print(f"The file {image_path} does not exist.")
-            continue
-        
-        if is_same_format('webp', image_path):
-            print(f"The file {image_path} is already in WEBP format, no conversion necessary.")
-            continue
+        try:
+            file_name = os.path.basename(image_path)
+            if not os.path.isfile(image_path) or is_same_format('webp', image_path):
+                continue
 
-        with Image.open(image_path) as image:
-            image_output_path = os.path.splitext(image_path)[0] + '.webp'
-            image.save(image_output_path, 'WEBP')
-            print(f"{image_path} has been converted to {image_output_path}.")
+            with Image.open(image_path) as image:
+                image_output_path = os.path.splitext(image_path)[0] + '.webp'
+                image.save(image_output_path, 'WEBP')
 
-        os.remove(image_path)
-        print(f"{image_path} has been deleted.")
+            os.remove(image_path)
+        except Exception as e:
+            gui_instance.append_message(f"Échec de la conversion de {file_name} en WEBP. Erreur : {e}")
 
 def convert_to_png(image_paths, gui_instance):
     for image_path in image_paths:
-        if not os.path.isfile(image_path):
-            print(f"The file {image_path} does not exist.")
-            continue
+        try:
+            file_name = os.path.basename(image_path)
+            if not os.path.isfile(image_path) or is_same_format('png', image_path):
+                continue
 
-        if is_same_format('png', image_path):
-            print(f"The file {image_path} is already in PNG format, no conversion necessary.")
-            continue
+            with Image.open(image_path) as image:
+                image_output_path = os.path.splitext(image_path)[0] + '.png'
+                image.save(image_output_path, 'PNG')
 
-        with Image.open(image_path) as image:
-            image_output_path = os.path.splitext(image_path)[0] + '.png'
-            image.save(image_output_path, 'PNG')
-            print(f"{image_path} has been converted to {image_output_path}.")
-
-        os.remove(image_path)
-        print(f"{image_path} has been deleted.")
-
-
+            os.remove(image_path)
+        except Exception as e:
+            gui_instance.append_message(f"Échec de la conversion de {file_name} en PNG. Erreur : {e}")
