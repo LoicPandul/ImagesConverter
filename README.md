@@ -1,6 +1,6 @@
-# ImageConverter
+# ImagesConverter
 
-ImageConverter est une application GUI simple en python conçue pour convertir des images entre différents formats par drag-and-drop. Ce n'est pas un logiciel de dingue, mais c'est un petit outil que j'avais fait pour moi afin de gagner en productivité, et si ça peut vous être utile à vous aussi, tant mieux ! Je vais essayer d'améliorer l'application au fur et à mesure.
+ImagesConverter est une application GUI simple en python conçue pour convertir des images entre différents formats par drag-and-drop. Ce n'est pas un logiciel de dingue, mais c'est un petit outil que j'avais fait pour moi afin de gagner en productivité, et si ça peut vous être utile à vous aussi, tant mieux ! Je vais essayer d'améliorer l'application au fur et à mesure.
 
 Actuellement, elle prend en charge la conversion d'images vers les formats JPEG et WEBP.
 
@@ -16,11 +16,11 @@ Avant de lancer l'application, assurez-vous d'avoir Python installé sur votre s
 
 ## Installation
 
-Pour utiliser ImageConverter, clonez d'abord ce dépôt sur votre machine locale en utilisant Git :
+Pour utiliser ImagesConverter, clonez d'abord ce dépôt sur votre machine locale en utilisant Git :
 
 ```bash
 git clone https://github.com/LoicPandul/ImagesConverter.git
-cd ImageConverter
+cd ImagesConverter
 ```
 
 Ensuite, installez les dépendances nécessaires :
