@@ -55,7 +55,7 @@ class ImageConverterGUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("Image Converter")
         self.setFixedSize(1000, 1000)
-        
+
         self.conversion_mode = None
 
         layout = QVBoxLayout()
@@ -64,15 +64,15 @@ class ImageConverterGUI(QMainWindow):
         layout.addWidget(self.drop_label)
 
         self.btn_to_jpeg = QPushButton("Convert to JPEG")
-        self.btn_to_jpeg.clicked.connect(lambda: self.set_conversion_mode('jpeg'))
+        self.btn_to_jpeg.clicked.connect(lambda: self.set_conversion_mode_and_clear_message('jpeg'))
         layout.addWidget(self.btn_to_jpeg)
 
         self.btn_to_webp = QPushButton("Convert to WEBP")
-        self.btn_to_webp.clicked.connect(lambda: self.set_conversion_mode('webp'))
+        self.btn_to_webp.clicked.connect(lambda: self.set_conversion_mode_and_clear_message('webp'))
         layout.addWidget(self.btn_to_webp)
 
         self.btn_to_png = QPushButton("Convert to PNG")
-        self.btn_to_png.clicked.connect(lambda: self.set_conversion_mode('png'))
+        self.btn_to_png.clicked.connect(lambda: self.set_conversion_mode_and_clear_message('png'))
         layout.addWidget(self.btn_to_png)
 
         self.message_terminal = QTextEdit()
@@ -83,8 +83,14 @@ class ImageConverterGUI(QMainWindow):
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
+        self.append_message("Select a conversion target by clicking a button to start.")
+
     def append_message(self, message):
         self.message_terminal.append(message)
+
+    def set_conversion_mode_and_clear_message(self, mode):
+        self.message_terminal.clear() 
+        self.set_conversion_mode(mode)
 
     def set_conversion_mode(self, mode):
         self.conversion_mode = mode
