@@ -1,10 +1,10 @@
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit, QLabel, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem
-from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon
 import sys
 import os
 
-from .image_processing import convert_to_jpeg, convert_to_webp, convert_to_png
+from .image_processing import convert_to_jpeg, convert_to_webp, convert_to_png, clean_metadata
 
 class DragDropLabel(QGraphicsView):
     def __init__(self, imageConverterGUI=None):
@@ -115,18 +115,21 @@ class ImageConverterGUI(QMainWindow):
         self.btn_to_png.setStyleSheet("")
 
     def convert_image(self, image_path):
-        file_name = os.path.basename(image_path)
-        try:
-            if self.conversion_mode == 'jpeg':
-                convert_to_jpeg([image_path], self)
-            elif self.conversion_mode == 'webp':
-                convert_to_webp([image_path], self)
-            elif self.conversion_mode == 'png':
-                convert_to_png([image_path], self)
+            file_name = os.path.basename(image_path)
+            try:
+                if self.conversion_mode == 'jpeg':
+                    convert_to_jpeg([image_path], self)
+                elif self.conversion_mode == 'webp':
+                    convert_to_webp([image_path], self)
+                elif self.conversion_mode == 'png':
+                    convert_to_png([image_path], self)
 
-            self.append_message(f"  - {file_name} has been converted to {self.conversion_mode.upper()}.")
-        except Exception as e:
-            self.append_message(f"An error occurred while converting {file_name}: {str(e)}")
+                # Nettoyer les métadonnées après la conversion
+                clean_metadata([image_path])
+
+                self.append_message(f"  - {file_name} has been converted to {self.conversion_mode.upper()}.")
+            except Exception as e:
+                self.append_message(f"An error occurred while converting {file_name}: {str(e)}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

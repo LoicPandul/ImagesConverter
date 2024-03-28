@@ -51,3 +51,14 @@ def convert_to_png(image_paths, gui_instance):
             os.remove(image_path)
         except Exception as e:
             gui_instance.append_message(f"Échec de la conversion de {file_name} en PNG. Erreur : {e}")
+
+def clean_metadata(image_paths):
+    for image_path in image_paths:
+        try:
+            img = Image.open(image_path)
+            data = list(img.getdata())
+            img_without_metadata = Image.new(img.mode, img.size)
+            img_without_metadata.putdata(data)
+            img_without_metadata.save(image_path)
+        except Exception as e:
+            print(f"An error occurred while cleaning metadata of {image_path}: {str(e)}")
