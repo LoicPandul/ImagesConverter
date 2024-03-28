@@ -56,10 +56,8 @@ class ImageConverterGUI(QMainWindow):
         self.setWindowTitle("Image Converter")
         self.setFixedSize(1000, 1000)
 
-        # Charger l'icône depuis le fichier
         icon = QIcon('./assets/icone.ico')
 
-        # Appliquer l'icône à la fenêtre principale
         self.setWindowIcon(icon)
 
         self.conversion_mode = None
@@ -124,7 +122,6 @@ class ImageConverterGUI(QMainWindow):
                 elif self.conversion_mode == 'png':
                     convert_to_png([image_path], self)
 
-                # Nettoyer les métadonnées après la conversion
                 clean_metadata([image_path])
 
                 self.append_message(f"  - {file_name} has been converted to {self.conversion_mode.upper()}.")
