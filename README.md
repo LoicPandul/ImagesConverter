@@ -1,6 +1,8 @@
 # ImageConverter
 
-ImageConverter est une application GUI simple conçue pour convertir des images entre différents formats. Actuellement, elle prend en charge la conversion d'images vers les formats JPEG et WEBP.
+ImageConverter est une application GUI simple en python conçue pour convertir des images entre différents formats par drag-and-drop. Ce n'est pas un logiciel de dingue, mais c'est un petit outil que j'avais fait pour moi afin de gagner en productivité, et si ça peut vous être utile à vous aussi, tant mieux ! Je vais essayer d'améliorer l'application au fur et à mesure.
+
+Actuellement, elle prend en charge la conversion d'images vers les formats JPEG et WEBP.
 
 ## Fonctionnalités
 
