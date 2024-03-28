@@ -9,6 +9,8 @@ Convertissez facilement vos images avec un simple drag-and-drop en formats :
 - WEBP ;
 - PNG.
 
+Les métadonnées superflues de vos images sont automatiquement supprimées lors de la conversion.
+
 ## Prérequis
 
 Avant de lancer l'application, assurez-vous d'avoir Python installé sur votre système. Cette application a été testée avec Python 3.8 et plus récents.
