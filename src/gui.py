@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit, QLabel, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem
 from PyQt5.QtCore import Qt, QRectF
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon
 import sys
 import os
 
@@ -55,6 +55,12 @@ class ImageConverterGUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("Image Converter")
         self.setFixedSize(1000, 1000)
+
+        # Charger l'icône depuis le fichier
+        icon = QIcon('./assets/icone.ico')
+
+        # Appliquer l'icône à la fenêtre principale
+        self.setWindowIcon(icon)
 
         self.conversion_mode = None
 
