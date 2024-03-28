@@ -1,22 +1,34 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit, QLabel
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit, QLabel, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem
+from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap
 import sys
 import os
 
 from .image_processing import convert_to_jpeg, convert_to_webp, convert_to_png
 
-class DragDropLabel(QLabel):
+class DragDropLabel(QGraphicsView):
     def __init__(self, imageConverterGUI=None):
         super().__init__(imageConverterGUI)
         self.imageConverterGUI = imageConverterGUI
-        self.setAcceptDrops(True)
-        self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("border: 1px dashed #ccc; min-width: 1000px; min-height: 450px;")
-        self.setText("\n\nDrag and drop images here!")
-
+        
+        scene = QGraphicsScene(0, 0, 1000, 450)
+        self.setScene(scene)
+        
         pixmap = QPixmap('assets/image_icon.png').scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.setPixmap(pixmap)
+        pixmapItem = QGraphicsPixmapItem(pixmap)
+        pixmapItem.setPos((scene.width() - pixmap.width()) / 2, (scene.height() - pixmap.height()) / 2 - 20)
+        scene.addItem(pixmapItem)
+        
+        textItem = QGraphicsTextItem("Drag and drop images here!")
+        textItem.setPos((scene.width() - textItem.boundingRect().width()) / 2, (scene.height() / 2) + 60)
+        scene.addItem(textItem)
+        
+        self.setAcceptDrops(True)
+        self.setStyleSheet("border: 1px dashed #ccc;")
+
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -42,8 +54,8 @@ class ImageConverterGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Image Converter")
-        self.setGeometry(100, 100, 400, 600)
-
+        self.setFixedSize(1000, 1000)
+        
         self.conversion_mode = None
 
         layout = QVBoxLayout()
