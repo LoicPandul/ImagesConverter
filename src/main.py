@@ -1,8 +1,9 @@
 from .gui import ImageConverterGUI
+from PyQt5.QtWidgets import QApplication
+import sys
 
 def main():
-    app = ImageConverterGUI()
-    app.mainloop()
-
-if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+    window = ImageConverterGUI()
+    window.show()
+    sys.exit(app.exec_())
