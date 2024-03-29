@@ -11,7 +11,7 @@ from .image_processing import convert_to, clean_metadata
 class DragDropLabel(QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.imageConverterGUI = parent
+        self.parent = parent
         
         scene = QGraphicsScene(0, 0, 1000, 450)
         self.setScene(scene)
@@ -47,8 +47,10 @@ class DragDropLabel(QGraphicsView):
         files = [url.toLocalFile() for url in event.mimeData().urls()]
         for file in files:
             print(f"Dropped file: {file}")
-            if self.imageConverterGUI.conversion_mode:
-                self.imageConverterGUI.convert_image(file)
+            if self.parent.conversion_mode:
+                self.parent.convert_image(file)
+            else:
+                self.parent.append_message(f"Select a target format!")
         event.acceptProposedAction()
 
 
