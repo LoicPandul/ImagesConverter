@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit, \
+from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit, \
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsTextItem
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon
 import sys
 import os
 
@@ -135,4 +135,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ImageConverterGUI()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
