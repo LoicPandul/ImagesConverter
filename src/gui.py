@@ -13,7 +13,7 @@ class DragDropLabel(QGraphicsView):
         super().__init__(parent)
         self.parent = parent
         
-        scene = QGraphicsScene(0, 0, 1000, 450)
+        scene = QGraphicsScene(0, 0, 600, 450)
         self.setScene(scene)
         
         pixmap = QPixmap('assets/image_icon.png').scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
