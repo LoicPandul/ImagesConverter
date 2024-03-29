@@ -66,4 +66,4 @@ def clean_metadata(image_paths):
             img_without_metadata.putdata(data)
             img_without_metadata.save(image_path)
         except Exception as e:
-            print(f"An error occurred while cleaning metadata of {image_path}: {str(e)}")
+            print(f"An error occurred while cleaning metadata of {image_path}: {e}")

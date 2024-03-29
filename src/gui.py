@@ -9,9 +9,9 @@ from .image_processing import convert_to_jpeg, convert_to_webp, convert_to_png, 
 
 
 class DragDropLabel(QGraphicsView):
-    def __init__(self, imageConverterGUI=None):
-        super().__init__(imageConverterGUI)
-        self.imageConverterGUI = imageConverterGUI
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.imageConverterGUI = parent
         
         scene = QGraphicsScene(0, 0, 1000, 450)
         self.setScene(scene)
@@ -58,7 +58,7 @@ class ImageConverterGUI(QMainWindow):
         self.setWindowTitle("Image Converter")
         self.setFixedSize(1000, 1000)
         
-        icon = QIcon('./assets/icone.ico')
+        icon = QIcon('./assets/icon.ico')
         
         self.setWindowIcon(icon)
         
@@ -128,7 +128,7 @@ class ImageConverterGUI(QMainWindow):
             
             self.append_message(f"  - {file_name} has been converted to {self.conversion_mode.upper()}.")
         except Exception as e:
-            self.append_message(f"An error occurred while converting {file_name}: {str(e)}")
+            self.append_message(f"An error occurred while converting {file_name}: {e}")
 
 
 if __name__ == "__main__":
