@@ -13,7 +13,11 @@ Les métadonnées superflues de vos images sont automatiquement supprimées lors
 
 ## Prérequis
 
-Avant de lancer l'application, assurez-vous d'avoir Python installé sur votre système. Cette application a été testée avec Python 3.8 et plus récents.
+Avant de lancer l'application, assurez-vous d'avoir Python installé sur votre système. Nécessite Python 3.10 ou une version ultérieure pour fonctionner.
+
+```bash
+python --version
+```
 
 ## Installation
 
