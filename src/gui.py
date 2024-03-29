@@ -58,7 +58,7 @@ class ImageConverterGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Image Converter")
-        self.setFixedSize(1000, 1000)
+        self.setFixedSize(600, 450)
         
         icon = QIcon('./assets/icon.ico')
         
