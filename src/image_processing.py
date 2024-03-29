@@ -1,58 +1,41 @@
 from PIL import Image
 import os
 
+
 def is_same_format(target_format, image_path):
     _, ext = os.path.splitext(image_path)
     return ext.lower() == f'.{target_format.lower()}'
 
-def convert_to_jpeg(image_paths, gui_instance):
-    for image_path in image_paths:
-        try:
-            file_name = os.path.basename(image_path)
-            if not os.path.isfile(image_path) or is_same_format('jpeg', image_path):
-                continue 
 
+def convert_to(image_format: str, image_paths, gui_instance):
+    image_format = image_format.lower()
+    if image_format not in ["jpeg", "png", "webp"]:
+        gui_instance.append_message(f"{image_format} n'est pas un format valide!")
+        return
+    
+    for image_path in image_paths:
+        file_name = os.path.basename(image_path)
+        try:
+            if not os.path.isfile(image_path):
+                gui_instance.append_message(f"{image_path} n'est pas un fichier valide!")
+                continue
+            elif is_same_format(image_format, image_path):
+                gui_instance.append_message(f"{image_path} est deja au format {image_format}")
+                continue
+            
             with Image.open(image_path) as image:
                 if image.mode in ("RGBA", "LA"):
                     image = image.convert("RGB")
-                image_output_path = os.path.splitext(image_path)[0] + '.jpeg'
-                image.save(image_output_path, 'JPEG')
-
+                image_output_path = os.path.splitext(image_path)[0] + '.' + image_format
+                image.save(image_output_path, image_format.upper())
+                gui_instance.append_message(f"  - {file_name} has been converted to {image_format.upper()}.")
+            
             os.remove(image_path)
         except Exception as e:
-            gui_instance.append_message(f"Échec de la conversion de {file_name} en JPEG. Erreur : {e}")
+            gui_instance.append_message(f"Échec de la conversion de {file_name} en {image_format}. Erreur : {e}")
 
-def convert_to_webp(image_paths, gui_instance):
-    for image_path in image_paths:
-        try:
-            file_name = os.path.basename(image_path)
-            if not os.path.isfile(image_path) or is_same_format('webp', image_path):
-                continue
 
-            with Image.open(image_path) as image:
-                image_output_path = os.path.splitext(image_path)[0] + '.webp'
-                image.save(image_output_path, 'WEBP')
-
-            os.remove(image_path)
-        except Exception as e:
-            gui_instance.append_message(f"Échec de la conversion de {file_name} en WEBP. Erreur : {e}")
-
-def convert_to_png(image_paths, gui_instance):
-    for image_path in image_paths:
-        try:
-            file_name = os.path.basename(image_path)
-            if not os.path.isfile(image_path) or is_same_format('png', image_path):
-                continue
-
-            with Image.open(image_path) as image:
-                image_output_path = os.path.splitext(image_path)[0] + '.png'
-                image.save(image_output_path, 'PNG')
-
-            os.remove(image_path)
-        except Exception as e:
-            gui_instance.append_message(f"Échec de la conversion de {file_name} en PNG. Erreur : {e}")
-
-def clean_metadata(image_paths):
+def clean_metadata(image_paths, gui_instance):
     for image_path in image_paths:
         try:
             img = Image.open(image_path)
@@ -61,4 +44,4 @@ def clean_metadata(image_paths):
             img_without_metadata.putdata(data)
             img_without_metadata.save(image_path)
         except Exception as e:
-            print(f"An error occurred while cleaning metadata of {image_path}: {str(e)}")
+            gui_instance.append_message(f"An error occurred while cleaning metadata of {image_path}: {e}")
