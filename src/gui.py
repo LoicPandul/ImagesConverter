@@ -5,7 +5,7 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon
 import sys
 import os
 
-from .image_processing import convert_to_jpeg, convert_to_webp, convert_to_png, clean_metadata
+from .image_processing import convert_to, clean_metadata
 
 
 class DragDropLabel(QGraphicsView):
@@ -119,13 +119,8 @@ class ImageConverterGUI(QMainWindow):
         try:
             clean_metadata([image_path])
             
-            if self.conversion_mode == 'jpeg':
-                convert_to_jpeg([image_path], self)
-            elif self.conversion_mode == 'webp':
-                convert_to_webp([image_path], self)
-            elif self.conversion_mode == 'png':
-                convert_to_png([image_path], self)
-            
+            convert_to(self.conversion_mode, [image_path], self)
+
             self.append_message(f"  - {file_name} has been converted to {self.conversion_mode.upper()}.")
         except Exception as e:
             self.append_message(f"An error occurred while converting {file_name}: {e}")
