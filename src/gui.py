@@ -117,14 +117,14 @@ class ImageConverterGUI(QMainWindow):
     def convert_image(self, image_path):
         file_name = os.path.basename(image_path)
         try:
+            clean_metadata([image_path])
+            
             if self.conversion_mode == 'jpeg':
                 convert_to_jpeg([image_path], self)
             elif self.conversion_mode == 'webp':
                 convert_to_webp([image_path], self)
             elif self.conversion_mode == 'png':
                 convert_to_png([image_path], self)
-            
-            clean_metadata([image_path])
             
             self.append_message(f"  - {file_name} has been converted to {self.conversion_mode.upper()}.")
         except Exception as e:
