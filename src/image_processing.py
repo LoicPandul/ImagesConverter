@@ -9,9 +9,13 @@ def is_same_format(target_format, image_path):
 
 def convert_to_jpeg(image_paths, gui_instance):
     for image_path in image_paths:
+        file_name = os.path.basename(image_path)
         try:
-            file_name = os.path.basename(image_path)
-            if not os.path.isfile(image_path) or is_same_format('jpeg', image_path):
+            if not os.path.isfile(image_path):
+                gui_instance.append_message(f"{image_path} n'est pas un fichier valide!")
+                continue
+            elif is_same_format('jpeg', image_path):
+                gui_instance.append_message(f"{image_path} est deja au format JPEG!")
                 continue
             
             with Image.open(image_path) as image:
@@ -19,10 +23,11 @@ def convert_to_jpeg(image_paths, gui_instance):
                     image = image.convert("RGB")
                 image_output_path = os.path.splitext(image_path)[0] + '.jpeg'
                 image.save(image_output_path, 'JPEG')
+                gui_instance.append_message(f"{image_path} => {image_output_path}")
             
             os.remove(image_path)
         except Exception as e:
-            gui_instance.append_message(f"Échec de la conversion de {image_path} en JPEG. Erreur : {e}")
+            gui_instance.append_message(f"Échec de la conversion de {file_name} en JPEG. Erreur : {e}")
 
 
 def convert_to_webp(image_paths, gui_instance):
