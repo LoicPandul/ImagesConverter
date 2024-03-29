@@ -22,7 +22,7 @@ def convert_to_jpeg(image_paths, gui_instance):
             
             os.remove(image_path)
         except Exception as e:
-            gui_instance.append_message(f"Échec de la conversion de {file_name} en JPEG. Erreur : {e}")
+            gui_instance.append_message(f"Échec de la conversion de {image_path} en JPEG. Erreur : {e}")
 
 
 def convert_to_webp(image_paths, gui_instance):
@@ -38,7 +38,7 @@ def convert_to_webp(image_paths, gui_instance):
             
             os.remove(image_path)
         except Exception as e:
-            gui_instance.append_message(f"Échec de la conversion de {file_name} en WEBP. Erreur : {e}")
+            gui_instance.append_message(f"Échec de la conversion de {image_path} en WEBP. Erreur : {e}")
 
 
 def convert_to_png(image_paths, gui_instance):
@@ -54,7 +54,7 @@ def convert_to_png(image_paths, gui_instance):
             
             os.remove(image_path)
         except Exception as e:
-            gui_instance.append_message(f"Échec de la conversion de {file_name} en PNG. Erreur : {e}")
+            gui_instance.append_message(f"Échec de la conversion de {image_path} en PNG. Erreur : {e}")
 
 
 def clean_metadata(image_paths):
