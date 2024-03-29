@@ -28,14 +28,14 @@ def convert_to(image_format: str, image_paths, gui_instance):
                     image = image.convert("RGB")
                 image_output_path = os.path.splitext(image_path)[0] + '.' + image_format
                 image.save(image_output_path, image_format.upper())
-                gui_instance.append_message(f"{image_path} => {image_output_path}")
+                gui_instance.append_message(f"  - {file_name} has been converted to {image_format.upper()}.")
             
             os.remove(image_path)
         except Exception as e:
             gui_instance.append_message(f"Échec de la conversion de {file_name} en {image_format}. Erreur : {e}")
 
 
-def clean_metadata(image_paths):
+def clean_metadata(image_paths, gui_instance):
     for image_path in image_paths:
         try:
             img = Image.open(image_path)
@@ -44,4 +44,4 @@ def clean_metadata(image_paths):
             img_without_metadata.putdata(data)
             img_without_metadata.save(image_path)
         except Exception as e:
-            print(f"An error occurred while cleaning metadata of {image_path}: {e}")
+            gui_instance.append_message(f"An error occurred while cleaning metadata of {image_path}: {e}")

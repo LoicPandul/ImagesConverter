@@ -117,11 +117,9 @@ class ImageConverterGUI(QMainWindow):
     def convert_image(self, image_path):
         file_name = os.path.basename(image_path)
         try:
-            clean_metadata([image_path])
+            clean_metadata([image_path], self)
             
             convert_to(self.conversion_mode, [image_path], self)
-
-            self.append_message(f"  - {file_name} has been converted to {self.conversion_mode.upper()}.")
         except Exception as e:
             self.append_message(f"An error occurred while converting {file_name}: {e}")
 
