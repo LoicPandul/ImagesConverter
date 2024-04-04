@@ -45,3 +45,4 @@ python run.py
 ## License
 
 CC0 1.0 Universal - Public Domain
+https://creativecommons.org/publicdomain/zero/1.0/
