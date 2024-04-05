@@ -5,7 +5,7 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon
 import sys
 import os
 
-from .image_processing import convert_to, clean_metadata
+from .image_processing import convert_to, clean_metadata, is_same_format
 
 if getattr(sys, 'frozen', False):
     application_path = sys._MEIPASS
@@ -123,10 +123,19 @@ class ImageConverterGUI(QMainWindow):
     def convert_image(self, image_path):
         file_name = os.path.basename(image_path)
         try:
+            # Nettoyer les métadonnées en premier
             clean_metadata([image_path], self)
-            convert_to(self.conversion_mode, [image_path], self)
+            
+            # Vérifie si le fichier est déjà dans le format cible avant la conversion.
+            # Si c'est le cas, le message indiquant que l'image est déjà dans le bon format sera toujours affiché,
+            # mais les métadonnées auront déjà été nettoyées.
+            if not is_same_format(self.conversion_mode, image_path):
+                convert_to(self.conversion_mode, [image_path], self)
+            else:
+                self.append_message(f"{file_name} is already in the format {self.conversion_mode}. Metadata cleaned.")
         except Exception as e:
-            self.append_message(f"An error occurred while converting {file_name}: {e}")
+            self.append_message(f"An error occurred while processing {file_name}: {e}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
