@@ -7,6 +7,13 @@ import os
 
 from .image_processing import convert_to, clean_metadata
 
+if getattr(sys, 'frozen', False):
+    application_path = sys._MEIPASS
+else:
+    application_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+icon_path = os.path.join(application_path, 'assets', 'icon.ico')
+image_icon_path = os.path.join(application_path, 'assets', 'image_icon.png')
 
 class DragDropLabel(QGraphicsView):
     def __init__(self, parent=None):
@@ -16,7 +23,7 @@ class DragDropLabel(QGraphicsView):
         scene = QGraphicsScene(0, 0, 600, 450)
         self.setScene(scene)
         
-        pixmap = QPixmap('assets/image_icon.png').scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        pixmap = QPixmap(image_icon_path).scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         pixmapItem = QGraphicsPixmapItem(pixmap)
         pixmapItem.setPos((scene.width() - pixmap.width()) / 2, (scene.height() - pixmap.height()) / 2 - 20)
         scene.addItem(pixmapItem)
@@ -50,19 +57,16 @@ class DragDropLabel(QGraphicsView):
             if self.parent.conversion_mode:
                 self.parent.convert_image(file)
             else:
-                self.parent.append_message(f"Select a target format!")
+                self.parent.append_message("Select a target format!")
         event.acceptProposedAction()
-
 
 class ImageConverterGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Image Converter")
+        self.setWindowTitle("Images Converter")
         self.setFixedSize(600, 450)
         
-        icon = QIcon('./assets/icon.ico')
-        
-        self.setWindowIcon(icon)
+        self.setWindowIcon(QIcon(icon_path))
         
         self.conversion_mode = None
         
@@ -109,7 +113,7 @@ class ImageConverterGUI(QMainWindow):
             self.btn_to_webp.setStyleSheet("background-color: #F2B807; color: black;")
         elif mode == 'png':
             self.btn_to_png.setStyleSheet("background-color: #F2B807; color: black;")
-        self.append_message(f"Mode : to {mode}")
+        self.append_message(f"Mode: to {mode}")
     
     def reset_button_styles(self):
         self.btn_to_jpeg.setStyleSheet("")
@@ -120,14 +124,12 @@ class ImageConverterGUI(QMainWindow):
         file_name = os.path.basename(image_path)
         try:
             clean_metadata([image_path], self)
-            
             convert_to(self.conversion_mode, [image_path], self)
         except Exception as e:
             self.append_message(f"An error occurred while converting {file_name}: {e}")
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ImageConverterGUI()
     window.show()
-    sys.exit(app.exec())
+    sys.exit(app.exec_())
