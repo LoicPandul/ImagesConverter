@@ -77,7 +77,7 @@ cd ImagesConverter
 Then, install the necessary dependencies:
 
 ```bash
-ImagesConverter % python3 -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 If you experience any trouble here, try this command:
