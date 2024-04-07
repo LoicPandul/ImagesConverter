@@ -1,52 +1,39 @@
 from PIL import Image
 import os
 
-def is_same_format(target_format, image_path):
-    _, ext = os.path.splitext(image_path)
-    return ext.lower() == f'.{target_format.lower()}'
+def process_image(image_path, format, signals):
+    try:
+        original_format = os.path.splitext(image_path)[-1].lower()
+        target_format = f'.{format.lower()}'
+        with Image.open(image_path) as img:
+            file_name = os.path.basename(image_path)
+            img, metadata_message = clean_metadata(img)
+            if original_format != target_format: 
+                img, conversion_message = convert_to(format, img, image_path)
+                os.remove(image_path) 
+                signals.finished.emit(f"{conversion_message}. {metadata_message}.")
+            else:  
+                img.save(image_path)
+                signals.finished.emit(f"{file_name} format is already {format.upper()}. {metadata_message}.")
+    except Exception as e:
+        signals.error.emit(f"Error processing {file_name}: {str(e)}")
 
-def convert_to(image_format: str, image_paths, gui_instance):
-    image_format = image_format.lower()
-    if image_format not in ["jpeg", "png", "webp"]:
-        gui_instance.append_message(f"{image_format} is not a valid format!")
-        return
+def clean_metadata(img):
+    data = list(img.getdata())
+    clean_img = Image.new(img.mode, img.size)
+    clean_img.putdata(data)
+    return clean_img, "Metadata cleaned"
+
+def convert_to(format, img, image_path):
+    if format not in ["jpeg", "png", "webp"]:
+        return img, f"{format} is not a valid format!"
     
-    for image_path in image_paths:
-        file_name = os.path.basename(image_path)
-        try:
-            if not os.path.isfile(image_path):
-                gui_instance.append_message(f"{image_path} is not a valid file!")
-                continue
-            elif is_same_format(image_format, image_path):
-                gui_instance.append_message(f"{image_path} is already in the format {image_format}")
-                continue
-            
-            with Image.open(image_path) as image:
-                image_output_path = os.path.splitext(image_path)[0] + '.' + image_format
-                
-                if image_format == 'webp':
-                    if image.mode in ("RGBA", "LA"):
-                        image.save(image_output_path, image_format.upper(), quality=90, lossless=True)
-                    else:
-                        image.save(image_output_path, image_format.upper(), quality=90)
-                else:
-                    if image.mode in ("RGBA", "LA") and image_format != 'png':
-                        image = image.convert("RGB")
-                    image.save(image_output_path, image_format.upper())
-                
-                gui_instance.append_message(f"  - {file_name} has been converted to {image_format.upper()}.")
-                
-                os.remove(image_path)
-        except Exception as e:
-            gui_instance.append_message(f"Failed to convert {file_name} to {image_format}. Error: {e}")
-
-def clean_metadata(image_paths, gui_instance):
-    for image_path in image_paths:
-        try:
-            img = Image.open(image_path)
-            data = list(img.getdata())
-            img_without_metadata = Image.new(img.mode, img.size)
-            img_without_metadata.putdata(data)
-            img_without_metadata.save(image_path)
-        except Exception as e:
-            gui_instance.append_message(f"An error occurred while cleaning metadata of {image_path}: {e}")
+    output_path = os.path.splitext(image_path)[0] + '.' + format
+    if format == 'webp':
+        img.save(output_path, format.upper(), quality=90)
+    else:
+        if img.mode in ("RGBA", "LA") and format != 'png':
+            img = img.convert("RGB")
+        img.save(output_path, format.upper())
+    
+    return img, f"{os.path.basename(image_path)} has been converted to {format.upper()}"
