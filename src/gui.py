@@ -123,12 +123,8 @@ class ImageConverterGUI(QMainWindow):
     def convert_image(self, image_path):
         file_name = os.path.basename(image_path)
         try:
-            # Nettoyer les métadonnées en premier
             clean_metadata([image_path], self)
             
-            # Vérifie si le fichier est déjà dans le format cible avant la conversion.
-            # Si c'est le cas, le message indiquant que l'image est déjà dans le bon format sera toujours affiché,
-            # mais les métadonnées auront déjà été nettoyées.
             if not is_same_format(self.conversion_mode, image_path):
                 convert_to(self.conversion_mode, [image_path], self)
             else:
