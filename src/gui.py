@@ -65,7 +65,7 @@ class DragDropLabel(QGraphicsView):
 class ImageConverterGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Image Converter")
+        self.setWindowTitle("Images Converter")
         self.setFixedSize(600, 600)
 
         self.setWindowIcon(QIcon(icon_path))
