@@ -1,44 +1,96 @@
 from PIL import Image
 import os
+import subprocess
+import shutil
 
 def is_same_format(target_format, image_path):
     _, ext = os.path.splitext(image_path)
-    return ext.lower() == f'.{target_format.lower()}'
+    return ext.lower() == f'.{target_format.lower()}' or (ext.lower() == '.jpg' and target_format.lower() == 'jpeg')
 
-def convert_to(image_format: str, image_paths, gui_instance):
+def has_transparency_image(image):
+    if image.mode in ('RGBA', 'LA'):
+        return True
+    elif image.mode == 'P':
+        if 'transparency' in image.info:
+            return True
+    return False
+
+def convert_to(image_format: str, image_paths, gui_instance, compression_level=None, output_path=None):
     image_format = image_format.lower()
     if image_format not in ["jpeg", "png", "webp"]:
         gui_instance.append_message(f"{image_format} is not a valid format!")
-        return
-    
+        return False
+
+    success = True
     for image_path in image_paths:
         file_name = os.path.basename(image_path)
         try:
             if not os.path.isfile(image_path):
                 gui_instance.append_message(f"{image_path} is not a valid file!")
                 continue
-            elif is_same_format(image_format, image_path):
-                gui_instance.append_message(f"{image_path} is already in the format {image_format}")
-                continue
-            
             with Image.open(image_path) as image:
-                image_output_path = os.path.splitext(image_path)[0] + '.' + image_format
-                
-                if image_format == 'webp':
-                    if image.mode in ("RGBA", "LA"):
-                        image.save(image_output_path, image_format.upper(), quality=90, lossless=True)
-                    else:
-                        image.save(image_output_path, image_format.upper(), quality=90)
+                if image_format == 'jpeg' and has_transparency_image(image):
+                    gui_instance.append_message(f"Failed to convert {file_name} to JPEG: image contains transparency.")
+                    success = False
+                    continue
+
+                if output_path:
+                    image_output_path = output_path
                 else:
-                    if image.mode in ("RGBA", "LA") and image_format != 'png':
-                        image = image.convert("RGB")
-                    image.save(image_output_path, image_format.upper())
-                
-                gui_instance.append_message(f"  - {file_name} has been converted to {image_format.upper()}.")
-                
-                os.remove(image_path)
+                    image_output_path = os.path.splitext(image_path)[0] + '.' + image_format
+
+                save_kwargs = get_compression_kwargs(image_format, compression_level)
+
+                save_image(image, image_output_path, image_format, save_kwargs)
+
+                if image_path == image_output_path:
+                    gui_instance.append_message(f"  - {file_name} processed and saved.")
+                else:
+                    gui_instance.append_message(f"  - {file_name} converted to {os.path.basename(image_output_path)}.")
         except Exception as e:
             gui_instance.append_message(f"Failed to convert {file_name} to {image_format}. Error: {e}")
+            success = False
+            if output_path and os.path.exists(output_path):
+                os.remove(output_path)
+    return success
+
+def get_compression_kwargs(image_format, compression_level):
+    save_kwargs = {}
+    if compression_level is None:
+        return save_kwargs
+    if image_format in ['jpeg', 'webp']:
+        if compression_level == 'low':
+            save_kwargs['quality'] = 90
+        elif compression_level == 'medium':
+            save_kwargs['quality'] = 70
+        elif compression_level == 'high':
+            save_kwargs['quality'] = 50
+    elif image_format == 'png':
+        save_kwargs['compression_level'] = compression_level
+    return save_kwargs
+
+def save_image(image, output_path, image_format, save_kwargs):
+    if image_format == 'png' and shutil.which('pngquant'):
+        temp_path = output_path + '.png'
+        image.save(temp_path, format='PNG')
+        compression_level = save_kwargs.get('compression_level', 'medium')
+        if compression_level == 'low':
+            quality = "80-100"
+        elif compression_level == 'medium':
+            quality = "60-80"
+        elif compression_level == 'high':
+            quality = "40-60"
+        else:
+            quality = "60-80"
+        subprocess.run(['pngquant', '--quality', quality, '--output', output_path, temp_path], check=True)
+        os.remove(temp_path)
+    else:
+        if image_format == 'png':
+            image.save(output_path, image_format.upper(), optimize=True)
+        else:
+            if image_format == 'jpeg' and image.mode in ('RGBA', 'LA'):
+                image = image.convert('RGB')
+            image.save(output_path, image_format.upper(), **save_kwargs)
 
 def clean_metadata(image_paths, gui_instance):
     for image_path in image_paths:
