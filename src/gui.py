@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QLabel, QCheckBox, QHBoxLayout, QFrame, QSizePolicy, QButtonGroup
 )
 from PySide6.QtCore import Qt, QUrl, QSize, QPropertyAnimation, QEasingCurve, QRect
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon, QFont
 from PIL import Image
 import sys
 import os
@@ -27,21 +27,40 @@ class DragDropWidget(QFrame):
         self.setAcceptDrops(True)
         self.setObjectName("DragDropWidget")
         self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)  # Optionnel: Ajuster les marges si nécessaire
         self.setLayout(self.layout)
 
         self.icon_label = QLabel()
-        pixmap = QPixmap(image_icon_path).scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.icon_label.setPixmap(pixmap)
-        self.icon_label.setAlignment(Qt.AlignCenter)
+        pixmap = QPixmap(image_icon_path)
+        if pixmap.isNull():
+            print(f"Failed to load image {image_icon_path}")
+        else:
+            # Obtenir le ratio de pixels de l'écran
+            device_ratio = self.devicePixelRatioF()
 
-        self.text_label = QLabel("Glissez-déposez vos images ici")
+            # Redimensionner l'image en tenant compte du ratio de pixels (par exemple, 60x60 pixels)
+            scaled_pixmap = pixmap.scaled(60 * device_ratio, 60 * device_ratio, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            scaled_pixmap.setDevicePixelRatio(device_ratio)
+            self.icon_label.setPixmap(scaled_pixmap)
+            self.icon_label.setFixedSize(scaled_pixmap.size() / device_ratio)  # Ajuster la taille fixe en conséquence
+        self.icon_label.setAlignment(Qt.AlignCenter)
+        self.icon_label.setScaledContents(False)  # Assurer que l'image n'est pas redimensionnée automatiquement
+
+        self.text_label = QLabel("DRAG AND DROP HERE")
         self.text_label.setAlignment(Qt.AlignCenter)
         self.text_label.setObjectName("DragDropText")
+        font = self.text_label.font()
+        font.setPointSize(font.pointSize() - 2)  # Réduire légèrement la taille de la police
+        font.setBold(True)
+        self.text_label.setFont(font)
 
         self.layout.addStretch()
-        self.layout.addWidget(self.icon_label)
-        self.layout.addWidget(self.text_label)
+        self.layout.addWidget(self.icon_label, alignment=Qt.AlignHCenter)
+        self.layout.addSpacing(20)  # Ajoute un espace de 20 pixels entre l'image et le texte
+        self.layout.addWidget(self.text_label, alignment=Qt.AlignHCenter)
         self.layout.addStretch()
+
+        self.original_geometry = None  # Initialiser la géométrie originale
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -54,7 +73,7 @@ class DragDropWidget(QFrame):
             self.setStyleSheet(self.styleSheet())
             self.animate_enlarge()
         else:
-            super().dragEnterEvent(event)
+            event.ignore()
 
     def dragLeaveEvent(self, event):
         self.setProperty("drag", False)
@@ -65,7 +84,7 @@ class DragDropWidget(QFrame):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
         else:
-            super().dragMoveEvent(event)
+            event.ignore()
 
     def dropEvent(self, event: QDropEvent):
         self.setProperty("drag", False)
@@ -73,20 +92,25 @@ class DragDropWidget(QFrame):
         self.animate_shrink()
         files = [url.toLocalFile() for url in event.mimeData().urls()]
         for file in files:
-            print(f"Fichier déposé : {file}")
+            print(f"Dropped file: {file}")
             if self.parent.conversion_mode:
                 self.parent.convert_image(file)
             else:
-                self.parent.append_message("Veuillez sélectionner un format cible !")
+                self.parent.append_message("Please select a target format!")
         event.acceptProposedAction()
 
     def animate_enlarge(self):
-        if not hasattr(self, 'original_geometry'):
+        if not self.original_geometry:
             return
         geom = self.original_geometry
         delta_w = int(geom.width() * 0.02)  # Réduction de l'agrandissement à 2%
         delta_h = int(geom.height() * 0.02)
-        enlarged_geom = QRect(geom.x() - delta_w // 2, geom.y() - delta_h // 2, geom.width() + delta_w, geom.height() + delta_h)
+        enlarged_geom = QRect(
+            geom.x() - delta_w // 2,
+            geom.y() - delta_h // 2,
+            geom.width() + delta_w,
+            geom.height() + delta_h
+        )
         self.animation = QPropertyAnimation(self, b"geometry")
         self.animation.setDuration(200)
         self.animation.setStartValue(self.geometry())
@@ -95,7 +119,7 @@ class DragDropWidget(QFrame):
         self.animation.start()
 
     def animate_shrink(self):
-        if not hasattr(self, 'original_geometry'):
+        if not self.original_geometry:
             return
         self.animation = QPropertyAnimation(self, b"geometry")
         self.animation.setDuration(200)
@@ -104,11 +128,14 @@ class DragDropWidget(QFrame):
         self.animation.setEasingCurve(QEasingCurve.OutQuad)
         self.animation.start()
 
+
+
+
 class ImageConverterGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Images Converter")
-        self.setFixedSize(700, 600)
+        self.setFixedSize(600, 450)  # Taille réduite d'environ 20%
         self.setWindowIcon(QIcon(icon_path))
 
         self.conversion_mode = None
@@ -128,21 +155,22 @@ class ImageConverterGUI(QMainWindow):
             }
             #DragDropWidget {
                 background-color: #F2F2F2;
-                border-radius: 10px;
+                border-radius: 5px;
             }
             #DragDropWidget[drag="true"] {
                 background-color: #BFF205;
             }
             #DragDropText {
                 color: #0D0D0D;
-                font-size: 18px;
+                font-size: 16px; /* Taille de police réduite */
+                font-weight: bold; /* Texte en gras */
             }
             QPushButton {
                 background-color: #F2F2F2;
                 color: #0D0D0D;
                 border: none;
-                padding: 10px;
-                border-radius: 10px;
+                padding: 5px;
+                border-radius: 3px;
             }
             QPushButton:hover {
                 background-color: #E0E0E0;
@@ -151,17 +179,13 @@ class ImageConverterGUI(QMainWindow):
                 background-color: #BFF205;
                 color: #0D0D0D;
             }
+            QPushButton#CompressionButton, QPushButton#ConversionButton {
+                font-size: 12px;
+            }
             QTextEdit {
                 background-color: #F2F2F2;
                 border: 1px solid #CCCCCC;
-                border-radius: 10px;
-            }
-            QComboBox {
-                background-color: #F2F2F2;
-                color: #0D0D0D;
-                border: 1px solid #CCCCCC;
                 border-radius: 5px;
-                padding: 5px;
             }
             /* Styles pour la case à cocher */
             QCheckBox {
@@ -183,40 +207,55 @@ class ImageConverterGUI(QMainWindow):
 
         # Configuration du layout principal
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(10, 10, 10, 10)
         central_widget = QWidget()
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
 
         # Zone de glisser-déposer
         self.drop_widget = DragDropWidget(self)
+        self.drop_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         main_layout.addWidget(self.drop_widget)
 
         # Espacement
-        main_layout.addSpacing(15)
+        main_layout.addSpacing(5)
 
-        # Options de conversion
+        # Layout des options de conversion et de compression
         options_layout = QHBoxLayout()
         options_layout.setSpacing(20)
-        options_layout.addStretch()  # Pour centrer horizontalement
 
-        # Boutons de conversion modernisés
+        # Options de conversion (à gauche)
+        conversion_layout = QVBoxLayout()
+        conversion_layout.setSpacing(5)
+
+        conversion_label = QLabel("Convert to format:")
+        conversion_label.setObjectName("SpecialText")
+        conversion_layout.addWidget(conversion_label)
+
+        # Boutons de conversion
+        conversion_buttons_layout = QHBoxLayout()
         self.btn_to_jpeg = QPushButton("JPEG")
         self.btn_to_jpeg.setCheckable(True)
         self.btn_to_jpeg.clicked.connect(lambda: self.set_conversion_mode_and_clear_message('jpeg'))
-        options_layout.addWidget(self.btn_to_jpeg)
+        self.btn_to_jpeg.setFixedSize(60, 25)
+        self.btn_to_jpeg.setObjectName("ConversionButton")
+        conversion_buttons_layout.addWidget(self.btn_to_jpeg)
 
         self.btn_to_webp = QPushButton("WEBP")
         self.btn_to_webp.setCheckable(True)
         self.btn_to_webp.clicked.connect(lambda: self.set_conversion_mode_and_clear_message('webp'))
-        options_layout.addWidget(self.btn_to_webp)
+        self.btn_to_webp.setFixedSize(60, 25)
+        self.btn_to_webp.setObjectName("ConversionButton")
+        conversion_buttons_layout.addWidget(self.btn_to_webp)
 
         self.btn_to_png = QPushButton("PNG")
         self.btn_to_png.setCheckable(True)
         self.btn_to_png.clicked.connect(lambda: self.set_conversion_mode_and_clear_message('png'))
-        options_layout.addWidget(self.btn_to_png)
+        self.btn_to_png.setFixedSize(60, 25)
+        self.btn_to_png.setObjectName("ConversionButton")
+        conversion_buttons_layout.addWidget(self.btn_to_png)
 
-        # Rendre les boutons mutuellement exclusifs avec QButtonGroup
+        # Rendre les boutons mutuellement exclusifs
         self.conversion_buttons = [self.btn_to_jpeg, self.btn_to_webp, self.btn_to_png]
         self.button_group = QButtonGroup()
         self.button_group.setExclusive(True)
@@ -224,38 +263,30 @@ class ImageConverterGUI(QMainWindow):
             self.button_group.addButton(btn)
             btn.setCheckable(True)
             btn.clicked.connect(self.update_button_styles)
-            btn.setFixedSize(100, 40)  # Même taille pour tous les boutons
+            font = btn.font()
+            font.setPointSize(10)
+            btn.setFont(font)
             btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        options_layout.addStretch()  # Pour centrer horizontalement
-        main_layout.addLayout(options_layout)
+        conversion_layout.addLayout(conversion_buttons_layout)
+        options_layout.addLayout(conversion_layout)
 
-        # Espacement
-        main_layout.addSpacing(15)
+        options_layout.addStretch()
 
-        # Autres options
-        other_options_layout = QHBoxLayout()
-
-        # Option "Supprimer l'image originale"
-        self.checkbox_delete_original = QCheckBox("Supprimer l'image originale après conversion")
-        self.checkbox_delete_original.setChecked(True)
-        self.checkbox_delete_original.setObjectName("SpecialText")
-        other_options_layout.addWidget(self.checkbox_delete_original)
-
-        other_options_layout.addStretch()
-
-        # Options de compression
+        # Options de compression (à droite)
         compression_layout = QVBoxLayout()
-        compression_label = QLabel("Niveau de compression :")
+        compression_layout.setSpacing(5)
+
+        compression_label = QLabel("Compression level:")
         compression_label.setObjectName("SpecialText")
         compression_layout.addWidget(compression_label, alignment=Qt.AlignRight)
 
-        # Boutons pour le niveau de compression
+        # Boutons de compression
         compression_buttons_layout = QHBoxLayout()
-        self.btn_comp_none = QPushButton("AUCUNE")
-        self.btn_comp_low = QPushButton("FAIBLE")
-        self.btn_comp_medium = QPushButton("MOYENNE")
-        self.btn_comp_high = QPushButton("FORTE")
+        self.btn_comp_none = QPushButton("NONE")
+        self.btn_comp_low = QPushButton("LOW")
+        self.btn_comp_medium = QPushButton("MEDIUM")
+        self.btn_comp_high = QPushButton("HIGH")
 
         self.compression_buttons = [self.btn_comp_none, self.btn_comp_low, self.btn_comp_medium, self.btn_comp_high]
         self.compression_group = QButtonGroup()
@@ -265,28 +296,48 @@ class ImageConverterGUI(QMainWindow):
             self.compression_group.addButton(btn)
             btn.setCheckable(True)
             btn.clicked.connect(self.update_compression_styles)
-            btn.setFixedSize(80, 30)
+            btn.setFixedSize(60, 25)
+            btn.setObjectName("CompressionButton")
+            font = btn.font()
+            font.setPointSize(10)  # Taille de police légèrement réduite
+            btn.setFont(font)
             btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             compression_buttons_layout.addWidget(btn)
 
-        # Définir "AUCUNE" comme sélection par défaut
+        # Définir "NONE" comme sélection par défaut
         self.btn_comp_none.setChecked(True)
         self.update_compression_styles()
 
         compression_layout.addLayout(compression_buttons_layout)
-        other_options_layout.addLayout(compression_layout)
+        options_layout.addLayout(compression_layout)
 
-        main_layout.addLayout(other_options_layout)
+        main_layout.addLayout(options_layout)
 
-        # Terminal de messages
+        # Espacement
+        main_layout.addSpacing(5)
+
+        # Option pour supprimer l'image originale (alignée à gauche)
+        delete_layout = QHBoxLayout()
+        #delete_layout.addStretch()
+
+        self.checkbox_delete_original = QCheckBox("Delete original image")
+        self.checkbox_delete_original.setChecked(True)
+        self.checkbox_delete_original.setObjectName("SpecialText")
+        delete_layout.addWidget(self.checkbox_delete_original)
+
+        delete_layout.addStretch()
+        main_layout.addLayout(delete_layout)
+
+        # Réduire la hauteur du terminal de messages
         self.message_terminal = QTextEdit()
         self.message_terminal.setReadOnly(True)
-        self.message_terminal.setFixedHeight(150)
+        self.message_terminal.setFixedHeight(80)  # Réduit de 120 à 80
         self.message_terminal.setObjectName("MessageTerminal")
         main_layout.addWidget(self.message_terminal)
 
-        self.append_message("Sélectionnez un format de conversion en cliquant sur un bouton pour commencer.")
+        self.append_message("Select a conversion format by clicking a button to start.")
 
+    # Les méthodes suivantes restent inchangées
     def append_message(self, message):
         self.message_terminal.append(message)
 
@@ -297,7 +348,7 @@ class ImageConverterGUI(QMainWindow):
     def set_conversion_mode(self, mode):
         self.conversion_mode = mode
         self.update_button_styles()
-        self.append_message(f"Mode : Convertir en {mode.upper()}")
+        self.append_message(f"Mode: Convert to {mode.upper()}")
 
     def update_button_styles(self):
         for btn in self.conversion_buttons:
@@ -311,13 +362,13 @@ class ImageConverterGUI(QMainWindow):
             if btn.isChecked():
                 btn.setStyleSheet("background-color: #BFF205; color: #0D0D0D;")
                 # Définir le niveau de compression en fonction du bouton sélectionné
-                if btn.text() == "AUCUNE":
+                if btn.text() == "NONE":
                     self.compression_level = None
-                elif btn.text() == "FAIBLE":
+                elif btn.text() == "LOW":
                     self.compression_level = 'low'
-                elif btn.text() == "MOYENNE":
+                elif btn.text() == "MEDIUM":
                     self.compression_level = 'medium'
-                elif btn.text() == "FORTE":
+                elif btn.text() == "HIGH":
                     self.compression_level = 'high'
             else:
                 btn.setStyleSheet("background-color: #F2F2F2; color: #0D0D0D;")
@@ -329,10 +380,10 @@ class ImageConverterGUI(QMainWindow):
         original_handled = False
         try:
             if not self.is_format_supported(image_path):
-                self.append_message(f"Format de {file_name} non supporté.")
+                self.append_message(f"Format of {file_name} not supported.")
                 return
             if self.conversion_mode == 'jpeg' and has_transparency(image_path):
-                self.append_message(f"Conversion de {file_name} en JPEG impossible : l'image contient de la transparence.")
+                self.append_message(f"Conversion of {file_name} to JPEG impossible: the image contains transparency.")
                 return
             compression_level = self.get_compression_level()
             output_path = None
@@ -355,7 +406,7 @@ class ImageConverterGUI(QMainWindow):
                         output_path = f"{base}-compressed{ext}"
                     success = convert_to(self.conversion_mode, [working_image_path], self, compression_level, output_path)
                     if success:
-                        self.append_message(f"{file_name} a été compressé.")
+                        self.append_message(f"{file_name} has been compressed.")
                         new_image_created = True
                         conversion_successful = True
                         if self.checkbox_delete_original.isChecked():
@@ -369,12 +420,12 @@ class ImageConverterGUI(QMainWindow):
                         base, ext = os.path.splitext(image_path)
                         output_path = f"{base}-clean{ext}"
                         shutil.move(working_image_path, output_path)
-                        self.append_message(f"Métadonnées de {file_name} nettoyées. Nouvelle image créée.")
+                        self.append_message(f"Metadata of {file_name} cleaned. New image created.")
                         new_image_created = True
                         conversion_successful = True
                     else:
                         os.replace(working_image_path, image_path)
-                        self.append_message(f"Métadonnées de {file_name} nettoyées.")
+                        self.append_message(f"Metadata of {file_name} cleaned.")
                         conversion_successful = True
                         new_image_created = False
             else:
@@ -393,7 +444,7 @@ class ImageConverterGUI(QMainWindow):
                 else:
                     conversion_successful = False
         except Exception as e:
-            self.append_message(f"Une erreur est survenue lors du traitement de {file_name} : {e}")
+            self.append_message(f"An error occurred while processing {file_name}: {e}")
             conversion_successful = False
         finally:
             if not self.checkbox_delete_original.isChecked():
