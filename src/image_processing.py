@@ -15,10 +15,11 @@ def has_transparency_image(image):
             return True
     return False
 
-def convert_to(image_format: str, image_paths, gui_instance, compression_level=None, output_path=None):
+def convert_to(image_format: str, image_paths, compression_level=None, output_path=None, log_func=None):
     image_format = image_format.lower()
     if image_format not in ["jpeg", "png", "webp"]:
-        gui_instance.append_message(f"{image_format} is not a valid format!")
+        if log_func:
+            log_func(f"{image_format} is not a valid format!")
         return False
 
     success = True
@@ -26,11 +27,13 @@ def convert_to(image_format: str, image_paths, gui_instance, compression_level=N
         file_name = os.path.basename(image_path)
         try:
             if not os.path.isfile(image_path):
-                gui_instance.append_message(f"{image_path} is not a valid file!")
+                if log_func:
+                    log_func(f"{image_path} is not a valid file!")
                 continue
             with Image.open(image_path) as image:
                 if image_format == 'jpeg' and has_transparency_image(image):
-                    gui_instance.append_message(f"Failed to convert {file_name} to JPEG: image contains transparency.")
+                    if log_func:
+                        log_func(f"Failed to convert {file_name} to JPEG: image contains transparency.")
                     success = False
                     continue
 
@@ -44,11 +47,14 @@ def convert_to(image_format: str, image_paths, gui_instance, compression_level=N
                 save_image(image, image_output_path, image_format, save_kwargs)
 
                 if image_path == image_output_path:
-                    gui_instance.append_message(f"  - {file_name} processed and saved.")
+                    if log_func:
+                        log_func(f"  - {file_name} processed and saved.")
                 else:
-                    gui_instance.append_message(f"  - {file_name} converted to {os.path.basename(image_output_path)}.")
+                    if log_func:
+                        log_func(f"  - {file_name} converted to {os.path.basename(image_output_path)}.")
         except Exception as e:
-            gui_instance.append_message(f"Failed to convert {file_name} to {image_format}. Error: {e}")
+            if log_func:
+                log_func(f"Failed to convert {file_name} to {image_format}. Error: {e}")
             success = False
             if output_path and os.path.exists(output_path):
                 os.remove(output_path)
@@ -66,33 +72,32 @@ def get_compression_kwargs(image_format, compression_level):
         elif compression_level == 'high':
             save_kwargs['quality'] = 50
     elif image_format == 'png':
-        save_kwargs['compression_level'] = compression_level
+        if compression_level == 'low':
+            save_kwargs['compress_level'] = 1
+        elif compression_level == 'medium':
+            save_kwargs['compress_level'] = 6
+        elif compression_level == 'high':
+            save_kwargs['compress_level'] = 9
     return save_kwargs
 
 def save_image(image, output_path, image_format, save_kwargs):
     if image_format == 'png' and shutil.which('pngquant'):
         temp_path = output_path + '.png'
         image.save(temp_path, format='PNG')
-        compression_level = save_kwargs.get('compression_level', 'medium')
-        if compression_level == 'low':
-            quality = "80-100"
-        elif compression_level == 'medium':
-            quality = "60-80"
-        elif compression_level == 'high':
-            quality = "40-60"
-        else:
-            quality = "60-80"
+        compression_level = save_kwargs.get('compress_level', 6)
+        quality_map = {1: "80-100", 6: "60-80", 9: "40-60"}
+        quality = quality_map.get(compression_level, "60-80")
         subprocess.run(['pngquant', '--quality', quality, '--output', output_path, temp_path], check=True)
         os.remove(temp_path)
     else:
         if image_format == 'png':
-            image.save(output_path, image_format.upper(), optimize=True)
+            image.save(output_path, image_format.upper(), optimize=True, **save_kwargs)
         else:
             if image_format == 'jpeg' and image.mode in ('RGBA', 'LA'):
                 image = image.convert('RGB')
             image.save(output_path, image_format.upper(), **save_kwargs)
 
-def clean_metadata(image_paths, gui_instance):
+def clean_metadata(image_paths, log_func=None):
     for image_path in image_paths:
         try:
             img = Image.open(image_path)
@@ -101,4 +106,5 @@ def clean_metadata(image_paths, gui_instance):
             img_without_metadata.putdata(data)
             img_without_metadata.save(image_path)
         except Exception as e:
-            gui_instance.append_message(f"An error occurred while cleaning metadata of {image_path}: {e}")
+            if log_func:
+                log_func(f"An error occurred while cleaning metadata of {image_path}: {e}")

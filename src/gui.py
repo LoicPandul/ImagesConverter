@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit,
     QLabel, QCheckBox, QHBoxLayout, QFrame, QSizePolicy, QButtonGroup
 )
-from PySide6.QtCore import Qt, QUrl, QSize, QPropertyAnimation, QEasingCurve, QRect
+from PySide6.QtCore import Qt, QUrl, QSize, QPropertyAnimation, QEasingCurve, QRect, QThreadPool, QRunnable, Slot, QObject, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon, QFont
 from PIL import Image
 import sys
@@ -19,6 +19,118 @@ else:
 icon_path = os.path.join(application_path, 'assets', 'icon.ico')
 image_icon_path = os.path.join(application_path, 'assets', 'image_icon.png')
 
+class WorkerSignals(QObject):
+    finished = Signal()
+    error = Signal(str)
+    result = Signal(str)
+
+class ImageProcessingTask(QRunnable):
+    def __init__(self, image_paths, delete_original, conversion_mode, compression_level):
+        super().__init__()
+        self.image_paths = image_paths
+        self.delete_original = delete_original
+        self.conversion_mode = conversion_mode
+        self.compression_level = compression_level
+        self.signals = WorkerSignals()
+
+    @Slot()
+    def run(self):
+        for image_path in self.image_paths:
+            file_name = os.path.basename(image_path)
+            conversion_successful = False
+            new_image_created = False
+            original_handled = False
+            try:
+                if not is_format_supported(image_path):
+                    self.signals.result.emit(f"Format of {file_name} not supported.")
+                    continue
+                if self.conversion_mode == 'jpeg' and has_transparency(image_path):
+                    self.signals.result.emit(f"Conversion of {file_name} to JPEG impossible: the image contains transparency.")
+                    continue
+                compression_level = self.compression_level
+                output_path = None
+
+                if not self.delete_original:
+                    base, ext = os.path.splitext(image_path)
+                    working_image_path = f"{base}-temp{ext}"
+                    shutil.copy2(image_path, working_image_path)
+                else:
+                    working_image_path = image_path
+
+                clean_metadata([working_image_path], log_func=self.signals.result.emit)
+
+                if is_same_format(self.conversion_mode, image_path):
+                    if compression_level is not None:
+                        base, ext = os.path.splitext(image_path)
+                        if self.delete_original:
+                            output_path = f"{base}-temp_compress{ext}"
+                        else:
+                            output_path = f"{base}-compressed{ext}"
+                        success = convert_to(
+                            self.conversion_mode,
+                            [working_image_path],
+                            compression_level,
+                            output_path,
+                            log_func=self.signals.result.emit
+                        )
+                        if success:
+                            self.signals.result.emit(f"{file_name} has been compressed.")
+                            new_image_created = True
+                            conversion_successful = True
+                            if self.delete_original:
+                                os.replace(output_path, image_path)
+                                original_handled = True
+                        else:
+                            if output_path and os.path.exists(output_path):
+                                os.remove(output_path)
+                    else:
+                        if not self.delete_original:
+                            base, ext = os.path.splitext(image_path)
+                            output_path = f"{base}-clean{ext}"
+                            shutil.move(working_image_path, output_path)
+                            self.signals.result.emit(f"Metadata of {file_name} cleaned. New image created.")
+                            new_image_created = True
+                            conversion_successful = True
+                        else:
+                            os.replace(working_image_path, image_path)
+                            self.signals.result.emit(f"Metadata of {file_name} cleaned.")
+                            conversion_successful = True
+                            new_image_created = False
+                else:
+                    if not self.delete_original:
+                        base, _ = os.path.splitext(image_path)
+                        output_path = f"{base}-converted.{self.conversion_mode}"
+                    else:
+                        output_path = None
+                    success = convert_to(
+                        self.conversion_mode,
+                        [working_image_path],
+                        compression_level,
+                        output_path,
+                        log_func=self.signals.result.emit
+                    )
+                    if success:
+                        new_image_created = True
+                        conversion_successful = True
+                        if self.delete_original:
+                            os.remove(image_path)
+                            original_handled = True
+                    else:
+                        conversion_successful = False
+            except Exception as e:
+                self.signals.error.emit(f"An error occurred while processing {file_name}: {e}")
+                conversion_successful = False
+            finally:
+                if not self.delete_original:
+                    if working_image_path and os.path.exists(working_image_path):
+                        os.remove(working_image_path)
+
+            if self.delete_original and conversion_successful and new_image_created and not original_handled:
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+                    original_handled = True
+        self.signals.finished.emit()
+
 class DragDropWidget(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -27,7 +139,7 @@ class DragDropWidget(QFrame):
         self.setAcceptDrops(True)
         self.setObjectName("DragDropWidget")
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 0)  # Optionnel: Ajuster les marges si nécessaire
+        self.layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(self.layout)
 
         self.icon_label = QLabel()
@@ -35,32 +147,29 @@ class DragDropWidget(QFrame):
         if pixmap.isNull():
             print(f"Failed to load image {image_icon_path}")
         else:
-            # Obtenir le ratio de pixels de l'écran
             device_ratio = self.devicePixelRatioF()
-
-            # Redimensionner l'image en tenant compte du ratio de pixels (par exemple, 60x60 pixels)
             scaled_pixmap = pixmap.scaled(60 * device_ratio, 60 * device_ratio, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             scaled_pixmap.setDevicePixelRatio(device_ratio)
             self.icon_label.setPixmap(scaled_pixmap)
-            self.icon_label.setFixedSize(scaled_pixmap.size() / device_ratio)  # Ajuster la taille fixe en conséquence
+            self.icon_label.setFixedSize(scaled_pixmap.size() / device_ratio)
         self.icon_label.setAlignment(Qt.AlignCenter)
-        self.icon_label.setScaledContents(False)  # Assurer que l'image n'est pas redimensionnée automatiquement
+        self.icon_label.setScaledContents(False)
 
         self.text_label = QLabel("DRAG AND DROP HERE")
         self.text_label.setAlignment(Qt.AlignCenter)
         self.text_label.setObjectName("DragDropText")
         font = self.text_label.font()
-        font.setPointSize(font.pointSize() - 2)  # Réduire légèrement la taille de la police
+        font.setPointSize(font.pointSize() - 2)
         font.setBold(True)
         self.text_label.setFont(font)
 
         self.layout.addStretch()
         self.layout.addWidget(self.icon_label, alignment=Qt.AlignHCenter)
-        self.layout.addSpacing(20)  # Ajoute un espace de 20 pixels entre l'image et le texte
+        self.layout.addSpacing(20)
         self.layout.addWidget(self.text_label, alignment=Qt.AlignHCenter)
         self.layout.addStretch()
 
-        self.original_geometry = None  # Initialiser la géométrie originale
+        self.original_geometry = None
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -91,10 +200,22 @@ class DragDropWidget(QFrame):
         self.setStyleSheet(self.styleSheet())
         self.animate_shrink()
         files = [url.toLocalFile() for url in event.mimeData().urls()]
-        for file in files:
-            print(f"Dropped file: {file}")
+        if files:
             if self.parent.conversion_mode:
-                self.parent.convert_image(file)
+                delete_original = self.parent.checkbox_delete_original.isChecked()
+                compression_level = self.parent.get_compression_level()
+                conversion_mode = self.parent.conversion_mode
+                task = ImageProcessingTask(
+                    files,
+                    delete_original,
+                    conversion_mode,
+                    compression_level
+                )
+                task.signals.result.connect(self.parent.append_message)
+                task.signals.error.connect(self.parent.append_message)
+                task.signals.finished.connect(self.parent.task_finished)
+                self.parent.thread_pool.start(task)
+                self.parent.tasks.append(task)
             else:
                 self.parent.append_message("Please select a target format!")
         event.acceptProposedAction()
@@ -103,7 +224,7 @@ class DragDropWidget(QFrame):
         if not self.original_geometry:
             return
         geom = self.original_geometry
-        delta_w = int(geom.width() * 0.02)  # Réduction de l'agrandissement à 2%
+        delta_w = int(geom.width() * 0.02)
         delta_h = int(geom.height() * 0.02)
         enlarged_geom = QRect(
             geom.x() - delta_w // 2,
@@ -128,20 +249,17 @@ class DragDropWidget(QFrame):
         self.animation.setEasingCurve(QEasingCurve.OutQuad)
         self.animation.start()
 
-
-
-
 class ImageConverterGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Images Converter")
-        self.setFixedSize(600, 450)  # Taille réduite d'environ 20%
+        self.setFixedSize(600, 450)
         self.setWindowIcon(QIcon(icon_path))
 
         self.conversion_mode = None
-        self.compression_level = None  # Initialisation du niveau de compression
+        self.compression_level = None
 
-        # Palette de couleurs modernes
+        # Palette de couleurs
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #0D0D0D;
@@ -162,8 +280,8 @@ class ImageConverterGUI(QMainWindow):
             }
             #DragDropText {
                 color: #0D0D0D;
-                font-size: 16px; /* Taille de police réduite */
-                font-weight: bold; /* Texte en gras */
+                font-size: 16px;
+                font-weight: bold;
             }
             QPushButton {
                 background-color: #F2F2F2;
@@ -187,7 +305,6 @@ class ImageConverterGUI(QMainWindow):
                 border: 1px solid #CCCCCC;
                 border-radius: 5px;
             }
-            /* Styles pour la case à cocher */
             QCheckBox {
                 font-size: 14px;
             }
@@ -195,17 +312,14 @@ class ImageConverterGUI(QMainWindow):
                 width: 20px;
                 height: 20px;
             }
-
             QCheckBox::indicator:unchecked {
                 image: url('assets/unchecked_icon.png');
             }
-
             QCheckBox::indicator:checked {
                 image: url('assets/checked_icon.png');
             }
         """)
 
-        # Configuration du layout principal
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         central_widget = QWidget()
@@ -217,7 +331,6 @@ class ImageConverterGUI(QMainWindow):
         self.drop_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         main_layout.addWidget(self.drop_widget)
 
-        # Espacement
         main_layout.addSpacing(5)
 
         # Layout des options de conversion et de compression
@@ -255,7 +368,6 @@ class ImageConverterGUI(QMainWindow):
         self.btn_to_png.setObjectName("ConversionButton")
         conversion_buttons_layout.addWidget(self.btn_to_png)
 
-        # Rendre les boutons mutuellement exclusifs
         self.conversion_buttons = [self.btn_to_jpeg, self.btn_to_webp, self.btn_to_png]
         self.button_group = QButtonGroup()
         self.button_group.setExclusive(True)
@@ -299,12 +411,11 @@ class ImageConverterGUI(QMainWindow):
             btn.setFixedSize(60, 25)
             btn.setObjectName("CompressionButton")
             font = btn.font()
-            font.setPointSize(10)  # Taille de police légèrement réduite
+            font.setPointSize(10)
             btn.setFont(font)
             btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             compression_buttons_layout.addWidget(btn)
 
-        # Définir "NONE" comme sélection par défaut
         self.btn_comp_none.setChecked(True)
         self.update_compression_styles()
 
@@ -313,12 +424,10 @@ class ImageConverterGUI(QMainWindow):
 
         main_layout.addLayout(options_layout)
 
-        # Espacement
         main_layout.addSpacing(5)
 
         # Option pour supprimer l'image originale (alignée à gauche)
         delete_layout = QHBoxLayout()
-        #delete_layout.addStretch()
 
         self.checkbox_delete_original = QCheckBox("Delete original image")
         self.checkbox_delete_original.setChecked(True)
@@ -328,16 +437,30 @@ class ImageConverterGUI(QMainWindow):
         delete_layout.addStretch()
         main_layout.addLayout(delete_layout)
 
-        # Réduire la hauteur du terminal de messages
         self.message_terminal = QTextEdit()
         self.message_terminal.setReadOnly(True)
-        self.message_terminal.setFixedHeight(80)  # Réduit de 120 à 80
+        self.message_terminal.setFixedHeight(80)
         self.message_terminal.setObjectName("MessageTerminal")
         main_layout.addWidget(self.message_terminal)
 
+        # Initialisation du ThreadPool
+        self.thread_pool = QThreadPool()
+        print(f"Multithreading with maximum {self.thread_pool.maxThreadCount()} threads")
+
+        self.tasks = []
+
+        # Message initial
         self.append_message("Select a conversion format by clicking a button to start.")
 
-    # Les méthodes suivantes restent inchangées
+    @Slot()
+    def task_finished(self):
+        sender = self.sender()
+        for task in self.tasks:
+            if task.signals == sender:
+                self.tasks.remove(task)
+                break
+
+    @Slot(str)
     def append_message(self, message):
         self.message_terminal.append(message)
 
@@ -361,7 +484,6 @@ class ImageConverterGUI(QMainWindow):
         for btn in self.compression_buttons:
             if btn.isChecked():
                 btn.setStyleSheet("background-color: #BFF205; color: #0D0D0D;")
-                # Définir le niveau de compression en fonction du bouton sélectionné
                 if btn.text() == "NONE":
                     self.compression_level = None
                 elif btn.text() == "LOW":
@@ -373,99 +495,16 @@ class ImageConverterGUI(QMainWindow):
             else:
                 btn.setStyleSheet("background-color: #F2F2F2; color: #0D0D0D;")
 
-    def convert_image(self, image_path):
-        file_name = os.path.basename(image_path)
-        conversion_successful = False
-        new_image_created = False
-        original_handled = False
-        try:
-            if not self.is_format_supported(image_path):
-                self.append_message(f"Format of {file_name} not supported.")
-                return
-            if self.conversion_mode == 'jpeg' and has_transparency(image_path):
-                self.append_message(f"Conversion of {file_name} to JPEG impossible: the image contains transparency.")
-                return
-            compression_level = self.get_compression_level()
-            output_path = None
-
-            if not self.checkbox_delete_original.isChecked():
-                base, ext = os.path.splitext(image_path)
-                working_image_path = f"{base}-temp{ext}"
-                shutil.copy2(image_path, working_image_path)
-            else:
-                working_image_path = image_path
-
-            clean_metadata([working_image_path], self)
-
-            if is_same_format(self.conversion_mode, image_path):
-                if compression_level is not None:
-                    base, ext = os.path.splitext(image_path)
-                    if self.checkbox_delete_original.isChecked():
-                        output_path = f"{base}-temp_compress{ext}"
-                    else:
-                        output_path = f"{base}-compressed{ext}"
-                    success = convert_to(self.conversion_mode, [working_image_path], self, compression_level, output_path)
-                    if success:
-                        self.append_message(f"{file_name} has been compressed.")
-                        new_image_created = True
-                        conversion_successful = True
-                        if self.checkbox_delete_original.isChecked():
-                            os.replace(output_path, image_path)
-                            original_handled = True
-                    else:
-                        if output_path and os.path.exists(output_path):
-                            os.remove(output_path)
-                else:
-                    if not self.checkbox_delete_original.isChecked():
-                        base, ext = os.path.splitext(image_path)
-                        output_path = f"{base}-clean{ext}"
-                        shutil.move(working_image_path, output_path)
-                        self.append_message(f"Metadata of {file_name} cleaned. New image created.")
-                        new_image_created = True
-                        conversion_successful = True
-                    else:
-                        os.replace(working_image_path, image_path)
-                        self.append_message(f"Metadata of {file_name} cleaned.")
-                        conversion_successful = True
-                        new_image_created = False
-            else:
-                if not self.checkbox_delete_original.isChecked():
-                    base, _ = os.path.splitext(image_path)
-                    output_path = f"{base}-converted.{self.conversion_mode}"
-                else:
-                    output_path = None
-                success = convert_to(self.conversion_mode, [working_image_path], self, compression_level, output_path)
-                if success:
-                    new_image_created = True
-                    conversion_successful = True
-                    if self.checkbox_delete_original.isChecked():
-                        os.remove(image_path)
-                        original_handled = True
-                else:
-                    conversion_successful = False
-        except Exception as e:
-            self.append_message(f"An error occurred while processing {file_name}: {e}")
-            conversion_successful = False
-        finally:
-            if not self.checkbox_delete_original.isChecked():
-                if working_image_path and os.path.exists(working_image_path):
-                    os.remove(working_image_path)
-
-        if self.checkbox_delete_original.isChecked() and conversion_successful and new_image_created and not original_handled:
-            if os.path.exists(image_path):
-                os.remove(image_path)
-                original_handled = True
-
     def get_compression_level(self):
         return self.compression_level
 
-    def is_format_supported(self, image_path):
-        supported_formats = ['.jpeg', '.jpg', '.png', '.webp']
-        _, ext = os.path.splitext(image_path)
-        if ext.lower() in supported_formats:
-            return True
-        else:
-            return False
+def is_format_supported(image_path):
+    supported_formats = ['.jpeg', '.jpg', '.png', '.webp']
+    _, ext = os.path.splitext(image_path)
+    if ext.lower() in supported_formats:
+        return True
+    else:
+        return False
 
 def has_transparency(image_path):
     try:
