@@ -19,6 +19,9 @@ else:
 icon_path = os.path.join(application_path, 'assets', 'icon.ico')
 image_icon_path = os.path.join(application_path, 'assets', 'image_icon.png')
 
+checked_icon_path = os.path.join(application_path, 'assets', 'checked_icon.png').replace('\\', '/')
+unchecked_icon_path = os.path.join(application_path, 'assets', 'unchecked_icon.png').replace('\\', '/')
+
 class WorkerSignals(QObject):
     finished = Signal()
     error = Signal(str)
@@ -259,67 +262,69 @@ class ImageConverterGUI(QMainWindow):
         self.conversion_mode = None
         self.compression_level = None
 
-        # Palette de couleurs
-        self.setStyleSheet("""
-            QMainWindow {
+        style_sheet = f"""
+            QMainWindow {{
                 background-color: #0D0D0D;
-            }
-            QLabel, QRadioButton, QPushButton, QComboBox, QTextEdit {
+            }}
+            QLabel, QRadioButton, QPushButton, QComboBox, QTextEdit {{
                 color: #0D0D0D;
                 font-size: 14px;
-            }
-            QLabel#SpecialText, QCheckBox#SpecialText {
+            }}
+            QLabel#SpecialText, QCheckBox#SpecialText {{
                 color: #F2F2F2;
-            }
-            #DragDropWidget {
+            }}
+            #DragDropWidget {{
                 background-color: #F2F2F2;
                 border-radius: 5px;
-            }
-            #DragDropWidget[drag="true"] {
+            }}
+            #DragDropWidget[drag="true"] {{
                 background-color: #BFF205;
-            }
-            #DragDropText {
+            }}
+            #DragDropText {{
                 color: #0D0D0D;
                 font-size: 16px;
                 font-weight: bold;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 background-color: #F2F2F2;
                 color: #0D0D0D;
                 border: none;
                 padding: 5px;
                 border-radius: 3px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: #E0E0E0;
-            }
-            QPushButton:checked {
+            }}
+            QPushButton:checked {{
                 background-color: #BFF205;
                 color: #0D0D0D;
-            }
-            QPushButton#CompressionButton, QPushButton#ConversionButton {
+            }}
+            QPushButton#CompressionButton, QPushButton#ConversionButton {{
                 font-size: 12px;
-            }
-            QTextEdit {
+            }}
+            QTextEdit {{
                 background-color: #F2F2F2;
                 border: 1px solid #CCCCCC;
                 border-radius: 5px;
-            }
-            QCheckBox {
+            }}
+            QCheckBox {{
                 font-size: 14px;
-            }
-            QCheckBox::indicator {
+            }}
+            QCheckBox::indicator {{
                 width: 20px;
                 height: 20px;
-            }
-            QCheckBox::indicator:unchecked {
-                image: url('assets/unchecked_icon.png');
-            }
-            QCheckBox::indicator:checked {
-                image: url('assets/checked_icon.png');
-            }
-        """)
+            }}
+            QCheckBox::indicator:unchecked {{
+                image: url("{unchecked_icon_path}");
+            }}
+            QCheckBox::indicator:checked {{
+                image: url("{checked_icon_path}");
+            }}
+        """
 
+        self.setStyleSheet(style_sheet)
+
+        # Configuration du layout principal
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         central_widget = QWidget()
@@ -437,6 +442,7 @@ class ImageConverterGUI(QMainWindow):
         delete_layout.addStretch()
         main_layout.addLayout(delete_layout)
 
+        # Terminal de messages
         self.message_terminal = QTextEdit()
         self.message_terminal.setReadOnly(True)
         self.message_terminal.setFixedHeight(80)
