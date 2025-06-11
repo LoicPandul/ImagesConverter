@@ -385,6 +385,11 @@ class ImageConverterGUI(QMainWindow):
             btn.setFont(font)
             btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
+        self.btn_to_webp.setChecked(True)
+        self.conversion_mode = 'webp'
+        self.update_button_styles()
+
+
         conversion_layout.addLayout(conversion_buttons_layout)
         options_layout.addLayout(conversion_layout)
 
@@ -456,7 +461,7 @@ class ImageConverterGUI(QMainWindow):
         self.tasks = []
 
         # Message initial
-        self.append_message("Select a conversion format by clicking a button to start.")
+        self.append_message("Mode: Convert to WEBP")
 
     @Slot()
     def task_finished(self):
