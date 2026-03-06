@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QTextEdit,
-    QLabel, QCheckBox, QHBoxLayout, QFrame, QSizePolicy, QButtonGroup
+    QLabel, QCheckBox, QHBoxLayout, QFrame, QSizePolicy, QButtonGroup, QLineEdit
 )
 from PySide6.QtCore import Qt, QUrl, QSize, QPropertyAnimation, QEasingCurve, QRect, QThreadPool, QRunnable, Slot, QObject, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon, QFont
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QIcon, QFont, QIntValidator
 from PIL import Image
 import sys
 import os
@@ -28,12 +28,12 @@ class WorkerSignals(QObject):
     result = Signal(str)
 
 class ImageProcessingTask(QRunnable):
-    def __init__(self, image_paths, delete_original, conversion_mode, compression_level):
+    def __init__(self, image_paths, delete_original, conversion_mode, max_size_kb):
         super().__init__()
         self.image_paths = image_paths
         self.delete_original = delete_original
         self.conversion_mode = conversion_mode
-        self.compression_level = compression_level
+        self.max_size_kb = max_size_kb
         self.signals = WorkerSignals()
 
     @Slot()
@@ -50,7 +50,7 @@ class ImageProcessingTask(QRunnable):
                 if self.conversion_mode == 'jpeg' and has_transparency(image_path):
                     self.signals.result.emit(f"Conversion of {file_name} to JPEG impossible: the image contains transparency.")
                     continue
-                compression_level = self.compression_level
+                max_size_kb = self.max_size_kb
                 output_path = None
 
                 if not self.delete_original:
@@ -63,7 +63,7 @@ class ImageProcessingTask(QRunnable):
                 clean_metadata([working_image_path], log_func=self.signals.result.emit)
 
                 if is_same_format(self.conversion_mode, image_path):
-                    if compression_level is not None:
+                    if max_size_kb is not None:
                         base, ext = os.path.splitext(image_path)
                         if self.delete_original:
                             output_path = f"{base}-temp_compress{ext}"
@@ -72,7 +72,7 @@ class ImageProcessingTask(QRunnable):
                         success = convert_to(
                             self.conversion_mode,
                             [working_image_path],
-                            compression_level,
+                            max_size_kb,
                             output_path,
                             log_func=self.signals.result.emit
                         )
@@ -108,7 +108,7 @@ class ImageProcessingTask(QRunnable):
                     success = convert_to(
                         self.conversion_mode,
                         [working_image_path],
-                        compression_level,
+                        max_size_kb,
                         output_path,
                         log_func=self.signals.result.emit
                     )
@@ -206,13 +206,13 @@ class DragDropWidget(QFrame):
         if files:
             if self.parent.conversion_mode:
                 delete_original = self.parent.checkbox_delete_original.isChecked()
-                compression_level = self.parent.get_compression_level()
+                max_size_kb = self.parent.get_max_size_kb()
                 conversion_mode = self.parent.conversion_mode
                 task = ImageProcessingTask(
                     files,
                     delete_original,
                     conversion_mode,
-                    compression_level
+                    max_size_kb
                 )
                 task.signals.result.connect(self.parent.append_message)
                 task.signals.error.connect(self.parent.append_message)
@@ -260,7 +260,6 @@ class ImageConverterGUI(QMainWindow):
         self.setWindowIcon(QIcon(icon_path))
 
         self.conversion_mode = None
-        self.compression_level = None
 
         style_sheet = f"""
             QMainWindow {{
@@ -299,7 +298,7 @@ class ImageConverterGUI(QMainWindow):
                 background-color: #BFF205;
                 color: #0D0D0D;
             }}
-            QPushButton#CompressionButton, QPushButton#ConversionButton {{
+            QPushButton#ConversionButton {{
                 font-size: 12px;
             }}
             QTextEdit {{
@@ -319,6 +318,17 @@ class ImageConverterGUI(QMainWindow):
             }}
             QCheckBox::indicator:checked {{
                 image: url("{checked_icon_path}");
+            }}
+            QLineEdit#CompressionInput {{
+                background-color: #F2F2F2;
+                color: #0D0D0D;
+                border: 1px solid #CCCCCC;
+                border-radius: 3px;
+                font-size: 13px;
+            }}
+            QLineEdit#CompressionInput:disabled {{
+                background-color: #555555;
+                color: #888888;
             }}
         """
 
@@ -399,37 +409,29 @@ class ImageConverterGUI(QMainWindow):
         compression_layout = QVBoxLayout()
         compression_layout.setSpacing(5)
 
-        compression_label = QLabel("Compression level:")
-        compression_label.setObjectName("SpecialText")
-        compression_layout.addWidget(compression_label, alignment=Qt.AlignRight)
+        self.checkbox_compression = QCheckBox("Compress (max size):")
+        self.checkbox_compression.setObjectName("SpecialText")
+        self.checkbox_compression.setChecked(False)
+        self.checkbox_compression.toggled.connect(self.toggle_compression)
+        compression_layout.addWidget(self.checkbox_compression, alignment=Qt.AlignRight)
 
-        # Boutons de compression
-        compression_buttons_layout = QHBoxLayout()
-        self.btn_comp_none = QPushButton("NONE")
-        self.btn_comp_low = QPushButton("LOW")
-        self.btn_comp_medium = QPushButton("MEDIUM")
-        self.btn_comp_high = QPushButton("HIGH")
+        compression_input_layout = QHBoxLayout()
+        compression_input_layout.addStretch()
+        self.compression_input = QLineEdit()
+        self.compression_input.setPlaceholderText("500")
+        self.compression_input.setValidator(QIntValidator(1, 999999))
+        self.compression_input.setFixedSize(70, 25)
+        self.compression_input.setAlignment(Qt.AlignCenter)
+        self.compression_input.setEnabled(False)
+        self.compression_input.setObjectName("CompressionInput")
+        compression_input_layout.addWidget(self.compression_input)
 
-        self.compression_buttons = [self.btn_comp_none, self.btn_comp_low, self.btn_comp_medium, self.btn_comp_high]
-        self.compression_group = QButtonGroup()
-        self.compression_group.setExclusive(True)
+        self.compression_unit_label = QLabel("KB")
+        self.compression_unit_label.setObjectName("SpecialText")
+        self.compression_unit_label.setEnabled(False)
+        compression_input_layout.addWidget(self.compression_unit_label)
 
-        for btn in self.compression_buttons:
-            self.compression_group.addButton(btn)
-            btn.setCheckable(True)
-            btn.clicked.connect(self.update_compression_styles)
-            btn.setFixedSize(60, 25)
-            btn.setObjectName("CompressionButton")
-            font = btn.font()
-            font.setPointSize(10)
-            btn.setFont(font)
-            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            compression_buttons_layout.addWidget(btn)
-
-        self.btn_comp_none.setChecked(True)
-        self.update_compression_styles()
-
-        compression_layout.addLayout(compression_buttons_layout)
+        compression_layout.addLayout(compression_input_layout)
         options_layout.addLayout(compression_layout)
 
         main_layout.addLayout(options_layout)
@@ -491,23 +493,18 @@ class ImageConverterGUI(QMainWindow):
             else:
                 btn.setStyleSheet("background-color: #F2F2F2; color: #0D0D0D;")
 
-    def update_compression_styles(self):
-        for btn in self.compression_buttons:
-            if btn.isChecked():
-                btn.setStyleSheet("background-color: #BFF205; color: #0D0D0D;")
-                if btn.text() == "NONE":
-                    self.compression_level = None
-                elif btn.text() == "LOW":
-                    self.compression_level = 'low'
-                elif btn.text() == "MEDIUM":
-                    self.compression_level = 'medium'
-                elif btn.text() == "HIGH":
-                    self.compression_level = 'high'
-            else:
-                btn.setStyleSheet("background-color: #F2F2F2; color: #0D0D0D;")
+    def toggle_compression(self):
+        enabled = self.checkbox_compression.isChecked()
+        self.compression_input.setEnabled(enabled)
+        self.compression_unit_label.setEnabled(enabled)
 
-    def get_compression_level(self):
-        return self.compression_level
+    def get_max_size_kb(self):
+        if not self.checkbox_compression.isChecked():
+            return None
+        text = self.compression_input.text().strip()
+        if text:
+            return int(text)
+        return None
 
 def is_format_supported(image_path):
     supported_formats = ['.jpeg', '.jpg', '.png', '.webp']
