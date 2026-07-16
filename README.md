@@ -1,71 +1,49 @@
-# ImagesConverter
+<p align="center">
+  <img src="assets/logo.png" width="90" alt="ImagesConverter logo" />
+</p>
 
-ImagesConverter is a simple Python GUI application designed for converting images between different formats via drag-and-drop. It's not an incredible software, but it's a small tool I made for myself to increase productivity, and if it can be useful to you as well, all the better! I will try to improve the software over time.
+<h1 align="center">ImagesConverter</h1>
+
+<p align="center">
+  Convert, compress and clean metadata from your images — fast, private, fully offline.
+</p>
+
+<p align="center">
+  <img src="assets/screenshot.png" width="720" alt="ImagesConverter screenshot" />
+</p>
+
+## Download
+
+Grab the latest installer from the [Releases](https://github.com/LoicPandul/ImagesConverter/releases) page. These builds are not signed (code signing certificates cost money and add nothing to the code), so your OS will warn you on first launch:
+
+| Platform | File | First launch |
+|---|---|---|
+| Windows | `*-setup.exe` or `.msi` | SmartScreen warns: click "More info", then "Run anyway" |
+| macOS | `.dmg` | Right-click the app, then "Open" |
+| Linux | `.AppImage` (portable), `.deb` or `.rpm` | Nothing special, `chmod +x` the AppImage |
 
 ## Features
 
-Easily convert your images with a simple drag-and-drop into formats:
-- JPEG;
-- WEBP;
-- PNG.
+- **Convert** JPEG, PNG, WEBP, GIF, BMP and TIFF images to **JPEG**, **WEBP** or **PNG** — drop files anywhere in the window, or browse.
+- **Metadata always removed** (EXIF, GPS, XMP, ICC, comments). When the file is already in the target format, metadata is stripped **losslessly** — pixels are never re-encoded.
+- **Compress to a size budget**: give a max size in KB and the app finds the best quality that fits (binary search on quality, then downscaling as a last resort). Lossy PNG uses built-in palette quantization — no external tools.
+- **EXIF orientation applied** before stripping, so rotated phone photos come out upright.
+- **Batch & parallel**: every file is processed on its own CPU core.
+- **Never overwrites**: existing files get a numbered suffix; originals are only deleted after the output is fully written (and only if you keep "Delete originals" on).
+- Native app on Windows, macOS and Linux — a few MB, starts instantly, no network access at all.
 
-Superfluous metadata from your images is automatically removed during conversion.
+## Build from source
 
-## Prerequisites
+Requires [Rust](https://rustup.rs/).
 
-Before launching the application, make sure you have Python installed on your system. Requires Python 3.10 or later.
-
-For Windows:
-```bash
-python --version
+```powershell
+cd src-tauri
+cargo run              # development
+cargo build --release  # target/release/imagesconverter(.exe)
 ```
 
-For macOS and Linux:
-```bash
-python3 --version
-```
-
-## Installation
-
-To use ImagesConverter, first clone this repository to your local machine using Git:
-
-```bash
-git clone https://github.com/LoicPandul/ImagesConverter.git
-cd ImagesConverter
-```
-
-Then, install the necessary dependencies:
-
-For Windows:
-```bash
-pip install -r requirements.txt
-```
-
-For macOS and Linux:
-```bash
-python3 -m pip install -r requirements.txt
-```
-
-If you experience any trouble here on macOS, try this command:
-```bash
-python3 -m pip install --upgrade pillow PySide6 PySide6_Addons PySide6_Essentials shiboken6
-```
-
-## How to Use
-
-To start the software, navigate to the project folder in your terminal, then execute:
-
-For Windows:
-```bash
-python run.py
-```
-
-For macOS and Linux:
-```bash
-python3 run.py
-```
+The frontend (`ui/`) is plain HTML, CSS and JavaScript: no Node, no build step.
 
 ## License
 
-CC0 1.0 Universal - Public Domain
-https://creativecommons.org/publicdomain/zero/1.0/
+Released into the public domain under the [Unlicense](LICENSE).

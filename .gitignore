@@ -1,16 +1,27 @@
-__pycache__/
-*.pyc
-.DS_Store
-env/
-venv/
-.obsidian/
-.idea/
-build/
-dist/
-*.spec
+# Rust / Tauri
+/src-tauri/target/
+/src-tauri/gen/schemas/
 
-# VSCode
-.vscode/
-
-# Claude
+# Claude Code — local only
 .claude/
+CLAUDE.md
+CLAUDE.local.md
+*.claude.json
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Local artifacts
+*.log
+dist/
+build/
+__pycache__/
+
+# Journal de travail local (jamais versionne)
+.local/
