@@ -5,7 +5,7 @@
 <h1 align="center">ImagesConverter</h1>
 
 <p align="center">
-  Convert and compress your images, and clean their metadata. Everything runs locally, in a native app of a few MB.
+  Convert and compress your images, and clean their metadata. Everything runs locally.
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 
 ## Download
 
-Grab the latest installer from the [Releases](https://github.com/LoicPandul/ImagesConverter/releases) page. These builds are not signed (code signing certificates cost money and add nothing to the code), so your OS will warn you on first launch:
+Grab the latest installer from the [Releases](https://github.com/LoicPandul/ImagesConverter/releases) page. These builds are not signed, so your OS will warn you on first launch:
 
 | Platform | File | First launch |
 |---|---|---|
@@ -37,10 +37,10 @@ Grab the latest installer from the [Releases](https://github.com/LoicPandul/Imag
 
 Requires [Rust](https://rustup.rs/).
 
-```powershell
+```sh
 cd src-tauri
 cargo run              # development
-cargo build --release  # target/release/imagesconverter(.exe)
+cargo build --release  # target/release/imagesconverter
 ```
 
 The frontend (`ui/`) is plain HTML, CSS and JavaScript: no Node, no build step.
