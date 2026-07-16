@@ -423,7 +423,7 @@ body[data-view="queue"] .bracket { width: 12px; height: 12px; }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--text-faint);
+  color: var(--text-dim);
   margin-bottom: 7px;
 }
 

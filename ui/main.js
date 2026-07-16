@@ -348,7 +348,7 @@ async function convert() {
       }
       renderCard(item);
     } else if (ev.type === "done") {
-      finishBatch(ev, options);
+      finishBatch(ev, batch);
     }
   };
 
@@ -369,7 +369,7 @@ async function convert() {
   }
 }
 
-function finishBatch(ev, options) {
+function finishBatch(ev, batch) {
   converting = false;
 
   // Anything not reached before a cancel goes back to ready.
@@ -378,7 +378,7 @@ function finishBatch(ev, options) {
     else renderCard(i); // restore remove buttons
   });
 
-  const saved = [...items.values()]
+  const saved = batch
     .filter((i) => i.status === "done" && i.result)
     .reduce((acc, i) => acc + Math.max(0, (i.result.inBytes ?? 0) - (i.result.outBytes ?? 0)), 0);
 
