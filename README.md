@@ -5,7 +5,7 @@
 <h1 align="center">ImagesConverter</h1>
 
 <p align="center">
-  Convert, compress and clean metadata from your images — fast, private, fully offline.
+  Convert and compress your images, and clean their metadata. Everything runs locally, in a native app of a few MB.
 </p>
 
 <p align="center">
@@ -24,13 +24,14 @@ Grab the latest installer from the [Releases](https://github.com/LoicPandul/Imag
 
 ## Features
 
-- **Convert** JPEG, PNG, WEBP, GIF, BMP and TIFF images to **JPEG**, **WEBP** or **PNG** — drop files anywhere in the window, or browse.
-- **Metadata always removed** (EXIF, GPS, XMP, ICC, comments). When the file is already in the target format, metadata is stripped **losslessly** — pixels are never re-encoded.
-- **Compress to a size budget**: give a max size in KB and the app finds the best quality that fits (binary search on quality, then downscaling as a last resort). Lossy PNG uses built-in palette quantization — no external tools.
-- **EXIF orientation applied** before stripping, so rotated phone photos come out upright.
-- **Batch & parallel**: every file is processed on its own CPU core.
-- **Never overwrites**: existing files get a numbered suffix; originals are only deleted after the output is fully written (and only if you keep "Delete originals" on).
-- Native app on Windows, macOS and Linux — a few MB, starts instantly, no network access at all.
+- Drop files anywhere in the window, or browse, to convert JPEG, PNG, WEBP, GIF, BMP and TIFF images to JPEG, WEBP or PNG.
+- Metadata is always removed: EXIF, GPS coordinates, XMP, IPTC, comments. When the file is already in the target format, the cleaning is lossless, since the app rewrites the container without re-encoding a single pixel.
+- The ICC color profile is deliberately kept. It contains no personal information (it is a generic file shipped with your camera or screen), and removing it would visibly shift the colors of wide-gamut images.
+- To guarantee a precise weight, give a maximum size in KB: the app searches for the best quality that fits, and only downscales as a last resort. Lossy PNG relies on built-in palette quantization, so there is no external tool to install.
+- The EXIF orientation is applied before the metadata is stripped, so rotated phone photos come out upright.
+- Every file is processed on its own CPU core.
+- Existing files are never overwritten (a numbered suffix is added instead), and an original is only deleted once its replacement is fully written.
+- Native on Windows, macOS and Linux: a few MB, instant startup, zero network access.
 
 ## Build from source
 
