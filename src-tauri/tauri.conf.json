@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ImagesConverter",
+  "version": "2.0.0",
+  "identifier": "org.pandul.imagesconverter",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "ImagesConverter",
+        "width": 780,
+        "height": 640,
+        "minWidth": 640,
+        "minHeight": 540,
+        "resizable": true,
+        "center": true,
+        "decorations": false,
+        "dragDropEnabled": true,
+        "backgroundColor": "#0A0B0D"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
