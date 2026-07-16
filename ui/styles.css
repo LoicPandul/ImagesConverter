@@ -182,11 +182,12 @@ body[data-view="queue"] .dropzone { flex: none; padding: 14px 0; }
 .bracket.bl { bottom: 12px; left: 12px; border-right: none; border-top: none; border-bottom-left-radius: 6px; }
 .bracket.br { bottom: 12px; right: 12px; border-left: none; border-top: none; border-bottom-right-radius: 6px; }
 
-.dropzone:hover .bracket, .dropzone:focus-visible .bracket { border-color: var(--lime); }
-.dropzone:hover .bracket.tl, .dropzone:focus-visible .bracket.tl { transform: translate(-3px, -3px); }
-.dropzone:hover .bracket.tr, .dropzone:focus-visible .bracket.tr { transform: translate(3px, -3px); }
-.dropzone:hover .bracket.bl, .dropzone:focus-visible .bracket.bl { transform: translate(-3px, 3px); }
-.dropzone:hover .bracket.br, .dropzone:focus-visible .bracket.br { transform: translate(3px, 3px); }
+.dropzone:hover .bracket,
+.dropzone:has(.link-btn:focus-visible) .bracket { border-color: var(--lime); }
+.dropzone:hover .bracket.tl, .dropzone:has(.link-btn:focus-visible) .bracket.tl { transform: translate(-3px, -3px); }
+.dropzone:hover .bracket.tr, .dropzone:has(.link-btn:focus-visible) .bracket.tr { transform: translate(3px, -3px); }
+.dropzone:hover .bracket.bl, .dropzone:has(.link-btn:focus-visible) .bracket.bl { transform: translate(-3px, 3px); }
+.dropzone:hover .bracket.br, .dropzone:has(.link-btn:focus-visible) .bracket.br { transform: translate(3px, 3px); }
 
 .dropzone-inner { padding: 20px; }
 
@@ -262,7 +263,7 @@ body[data-view="queue"] .bracket { width: 12px; height: 12px; }
   color: var(--text-dim);
 }
 
-#queue-count { color: var(--text-faint); margin-left: 4px; }
+#queue-count { color: var(--text-dim); margin-left: 4px; }
 
 .queue-actions { display: flex; gap: 6px; }
 
@@ -350,7 +351,7 @@ body[data-view="queue"] .bracket { width: 12px; height: 12px; }
 
 .file-card[data-state="error"] .file-sub { color: var(--red); }
 
-.file-sub .arrow { color: var(--text-faint); padding: 0 3px; }
+.file-sub .arrow { color: var(--text-dim); padding: 0 3px; }
 .file-sub .out { color: var(--text); }
 
 .trail { flex: none; display: flex; align-items: center; gap: 8px; }
@@ -398,6 +399,9 @@ body[data-view="queue"] .bracket { width: 12px; height: 12px; }
 
 .icon-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
 .icon-btn svg { width: 14px; height: 14px; }
+
+/* One switch for the whole queue: no per-card re-render when a batch runs. */
+body.converting .icon-btn.remove { display: none; }
 
 /* ---------- console ---------- */
 
@@ -525,8 +529,8 @@ fieldset.format-control legend { padding: 0; }
   outline: none;
 }
 
-.kb-field input:disabled { color: var(--text-faint); }
-.kb-field:has(input:disabled) { opacity: 0.45; }
+.kb-field input:disabled { color: var(--text-dim); }
+.kb-field:has(input:disabled) { opacity: 0.6; }
 
 .kb-field input::placeholder { color: var(--text-faint); }
 

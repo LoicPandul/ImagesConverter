@@ -85,14 +85,16 @@ function saveOptions() {
 }
 
 function restoreOptions() {
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem("options") || "null"); } catch { /* ignore */ }
-  if (!saved) return;
-  const radio = document.querySelector(`input[name="format"][value="${saved.format}"]`);
-  if (radio) radio.checked = true;
-  els.compress.checked = !!saved.compress;
-  if (/^\d*$/.test(saved.maxKb ?? "")) els.maxKb.value = saved.maxKb ?? "";
-  els.deleteOriginal.checked = saved.deleteOriginal !== false;
+  try {
+    const saved = JSON.parse(localStorage.getItem("options") || "null");
+    if (!saved) return;
+    if (["jpeg", "webp", "png"].includes(saved.format)) {
+      document.querySelector(`input[name="format"][value="${saved.format}"]`).checked = true;
+    }
+    els.compress.checked = !!saved.compress;
+    if (/^\d*$/.test(saved.maxKb ?? "")) els.maxKb.value = saved.maxKb ?? "";
+    els.deleteOriginal.checked = saved.deleteOriginal !== false;
+  } catch { /* corrupted storage must never brick the app */ }
   syncCompressField();
 }
 
@@ -146,23 +148,37 @@ function setStatus(text, tone = "") {
   els.status.className = `status-line ${tone}`;
 }
 
+// File names and backend strings go through textContent only — never markup.
+function span(text, className) {
+  const s = document.createElement("span");
+  if (className) s.className = className;
+  s.textContent = text;
+  return s;
+}
+
 function cardSub(item) {
   const el = item.el.querySelector(".file-sub");
+  el.textContent = "";
   switch (item.status) {
     case "ready":
-      el.innerHTML = `<span class="mono">${fmtBytes(item.size)}</span>`;
+      el.append(span(fmtBytes(item.size), "mono"));
       break;
     case "converting":
-      el.innerHTML = `<span class="mono">${fmtBytes(item.size)}</span><span class="arrow">→</span>converting…`;
+      el.append(span(fmtBytes(item.size), "mono"), span("→", "arrow"), "converting…");
       break;
     case "done": {
       const out = item.result;
-      const name = baseName(out.outPath);
-      el.innerHTML =
-        `<span class="mono">${fmtBytes(out.inBytes)}</span><span class="arrow">→</span>` +
-        `<span class="mono out">${fmtBytes(out.outBytes)}</span>&ensp;<span class="out">${name}</span>` +
-        (out.resizedTo ? `&ensp;<span class="mono">resized ${out.resizedTo[0]}×${out.resizedTo[1]}</span>` : "") +
-        (out.warning ? `&ensp;— ${out.warning}` : "");
+      el.append(
+        span(fmtBytes(out.inBytes), "mono"),
+        span("→", "arrow"),
+        span(fmtBytes(out.outBytes), "mono out"),
+        " ",
+        span(baseName(out.outPath), "out"),
+      );
+      if (out.resizedTo) {
+        el.append(" ", span(`resized ${out.resizedTo[0]}×${out.resizedTo[1]}`, "mono"));
+      }
+      if (out.warning) el.append(` — ${out.warning}`);
       break;
     }
     case "error":
@@ -204,20 +220,23 @@ function cardTrail(item) {
     trail.appendChild(reveal);
   }
 
-  if (!converting) {
-    const remove = document.createElement("button");
-    remove.className = "icon-btn";
-    remove.type = "button";
-    remove.title = "Remove from queue";
-    remove.setAttribute("aria-label", `Remove ${item.name} from queue`);
-    remove.innerHTML = ICONS.remove;
-    remove.addEventListener("click", () => {
-      items.delete(item.path);
-      item.el.remove();
-      setView();
-    });
-    trail.appendChild(remove);
-  }
+  const remove = document.createElement("button");
+  remove.className = "icon-btn remove";
+  remove.type = "button";
+  remove.title = "Remove from queue";
+  remove.setAttribute("aria-label", `Remove ${item.name} from queue`);
+  remove.innerHTML = ICONS.remove;
+  remove.addEventListener("click", () => {
+    if (converting) return;
+    const nextFocus =
+      item.el.nextElementSibling?.querySelector(".icon-btn.remove") ||
+      item.el.previousElementSibling?.querySelector(".icon-btn.remove");
+    items.delete(item.path);
+    item.el.remove();
+    setView();
+    (nextFocus || (items.size ? els.clearAll : els.browse)).focus();
+  });
+  trail.appendChild(remove);
 }
 
 function renderCard(item) {
@@ -323,8 +342,8 @@ async function convert() {
   if (!batch.length) return;
 
   converting = true;
+  document.body.classList.add("converting");
   refreshAction();
-  batch.forEach((i) => renderCard(i)); // hide per-card remove buttons
   const options = currentOptions();
   setStatus(`Converting 0/${batch.length}…`);
 
@@ -360,10 +379,10 @@ async function convert() {
     });
   } catch (e) {
     converting = false;
+    document.body.classList.remove("converting");
     setStatus(`${e}`, "bad");
     [...items.values()].forEach((i) => {
-      if (i.status === "converting") { i.status = "ready"; }
-      renderCard(i);
+      if (i.status === "converting") { i.status = "ready"; renderCard(i); }
     });
     refreshAction();
   }
@@ -371,11 +390,11 @@ async function convert() {
 
 function finishBatch(ev, batch) {
   converting = false;
+  document.body.classList.remove("converting");
 
   // Anything not reached before a cancel goes back to ready.
   [...items.values()].forEach((i) => {
     if (i.status === "converting") { i.status = "ready"; renderCard(i); }
-    else renderCard(i); // restore remove buttons
   });
 
   const saved = batch
@@ -404,11 +423,9 @@ function wire() {
   $("win-max").addEventListener("click", () => appWindow.toggleMaximize());
   $("win-close").addEventListener("click", () => appWindow.close());
 
-  // Drop zone.
+  // Drop zone: the inner browse button is the single accessible control;
+  // clicking anywhere in the zone works too for mouse users.
   els.dropzone.addEventListener("click", browse);
-  els.dropzone.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); browse(); }
-  });
   els.browse.addEventListener("click", (e) => {
     e.stopPropagation();
     browse();
@@ -444,7 +461,12 @@ function wire() {
       }
     })
   );
-  els.compress.addEventListener("change", () => { syncCompressField(); saveOptions(); });
+  els.compress.addEventListener("change", () => {
+    // Make the default explicit: the placeholder becomes a real value.
+    if (els.compress.checked && !els.maxKb.value) els.maxKb.value = "500";
+    syncCompressField();
+    saveOptions();
+  });
   els.maxKb.addEventListener("input", () => {
     els.maxKb.value = els.maxKb.value.replace(/\D/g, "");
     saveOptions();
@@ -458,6 +480,7 @@ function wire() {
     els.list.innerHTML = "";
     setView();
     setStatus(`Mode: convert to ${currentFormat().toUpperCase()}`);
+    els.browse.focus();
   });
   els.clearDone.addEventListener("click", () => {
     if (converting) return;
@@ -465,6 +488,7 @@ function wire() {
       if (i.status === "done") { items.delete(i.path); i.el.remove(); }
     });
     setView();
+    (items.size ? els.clearAll : els.browse).focus();
   });
 
   els.convert.addEventListener("click", convert);
