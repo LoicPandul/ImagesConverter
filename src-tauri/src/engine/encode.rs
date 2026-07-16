@@ -12,22 +12,18 @@ pub const WEBP_QUALITY: u8 = 82;
 pub const CLEAN_QUALITY: u8 = 95;
 
 pub fn encode_default(image: &DynamicImage, format: TargetFormat) -> Result<Vec<u8>, EngineError> {
-    match format {
-        TargetFormat::Jpeg => encode_jpeg(image, JPEG_QUALITY),
-        TargetFormat::Webp => encode_webp(image, WEBP_QUALITY),
-        TargetFormat::Png => encode_png_best(image),
-    }
+    let quality = match format {
+        TargetFormat::Jpeg => JPEG_QUALITY,
+        _ => WEBP_QUALITY,
+    };
+    encode_lossy(image, format, quality)
 }
 
 pub fn encode_clean(image: &DynamicImage, format: TargetFormat) -> Result<Vec<u8>, EngineError> {
-    match format {
-        TargetFormat::Jpeg => encode_jpeg(image, CLEAN_QUALITY),
-        TargetFormat::Webp => encode_webp(image, CLEAN_QUALITY),
-        TargetFormat::Png => encode_png_best(image),
-    }
+    encode_lossy(image, format, CLEAN_QUALITY)
 }
 
-/// Encoder used by the target-size search (PNG has no quality knob).
+/// The one place a TargetFormat picks its encoder (PNG has no quality knob).
 pub fn encode_lossy(
     image: &DynamicImage,
     format: TargetFormat,

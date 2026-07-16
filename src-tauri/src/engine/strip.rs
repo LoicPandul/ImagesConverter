@@ -14,8 +14,10 @@ pub fn strip_metadata(bytes: &[u8], format: ImageFormat) -> Option<Vec<u8>> {
     }
 }
 
-/// Drop APP1..APP13, APP15 and COM segments (EXIF, XMP, ICC, IPTC, comments).
+/// Drop APP1..APP13, APP15 and COM segments (EXIF, XMP, IPTC, comments).
 /// APP0 (JFIF) and APP14 (Adobe color transform) stay: decoders rely on them.
+/// APP2 stays only when it carries the ICC color profile — dropping it would
+/// visibly shift colors of wide-gamut images, that is rendering data.
 fn strip_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
     if bytes.len() < 4 || bytes[0..2] != [0xFF, 0xD8] {
         return None;
@@ -33,6 +35,9 @@ fn strip_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
         // Fill bytes are allowed between segments.
         while i + 2 <= bytes.len() && bytes[i + 1] == 0xFF {
             i += 1;
+        }
+        if i + 2 > bytes.len() {
+            return None;
         }
         let marker = bytes[i + 1];
         match marker {
@@ -54,7 +59,11 @@ fn strip_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
                 if len < 2 || i + 2 + len > bytes.len() {
                     return None;
                 }
-                let keep = !matches!(marker, 0xE1..=0xED | 0xEF | 0xFE);
+                let keep = match marker {
+                    0xE2 => bytes[i + 4..i + 2 + len].starts_with(b"ICC_PROFILE\0"),
+                    0xE1..=0xED | 0xEF | 0xFE => false,
+                    _ => true,
+                };
                 if keep {
                     out.extend_from_slice(&bytes[i..i + 2 + len]);
                 }
@@ -65,10 +74,12 @@ fn strip_jpeg(bytes: &[u8]) -> Option<Vec<u8>> {
 }
 
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
-/// Chunks required for correct rendering. Everything else (tEXt, eXIf, tIME,
-/// pHYs, iCCP, ...) is metadata and gets dropped.
-const PNG_KEEP: [&[u8; 4]; 9] = [
-    b"IHDR", b"PLTE", b"tRNS", b"IDAT", b"IEND", b"sRGB", b"gAMA", b"cHRM", b"sBIT",
+/// Chunks required for correct rendering (iCCP included: color profiles are
+/// rendering data). Everything else (tEXt, eXIf, tIME, pHYs, ...) is metadata
+/// and gets dropped. Animated PNGs never reach this path — they are refused
+/// at decode time.
+const PNG_KEEP: [&[u8; 4]; 10] = [
+    b"IHDR", b"PLTE", b"tRNS", b"IDAT", b"IEND", b"sRGB", b"gAMA", b"cHRM", b"sBIT", b"iCCP",
 ];
 
 fn strip_png(bytes: &[u8]) -> Option<Vec<u8>> {
@@ -96,8 +107,8 @@ fn strip_png(bytes: &[u8]) -> Option<Vec<u8>> {
     None
 }
 
-/// WebP RIFF container: drop EXIF, XMP and ICCP chunks; clear the matching
-/// feature bits in the VP8X header when present.
+/// WebP RIFF container: drop EXIF and XMP chunks (ICCP stays — color profiles
+/// are rendering data); clear the matching feature bits in the VP8X header.
 fn strip_webp(bytes: &[u8]) -> Option<Vec<u8>> {
     if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
         return None;
@@ -116,7 +127,7 @@ fn strip_webp(bytes: &[u8]) -> Option<Vec<u8>> {
         i += 8 + padded;
     }
 
-    let is_metadata = |cc: &[u8; 4]| matches!(cc, b"EXIF" | b"XMP " | b"ICCP");
+    let is_metadata = |cc: &[u8; 4]| matches!(cc, b"EXIF" | b"XMP ");
     let had_metadata = chunks.iter().any(|(cc, _)| is_metadata(cc));
     chunks.retain(|(cc, _)| !is_metadata(cc));
 
@@ -129,8 +140,8 @@ fn strip_webp(bytes: &[u8]) -> Option<Vec<u8>> {
     body.extend_from_slice(b"WEBP");
     for (fourcc, data) in &mut chunks {
         if *fourcc == *b"VP8X" && !data.is_empty() {
-            // Clear ICC (bit 5), EXIF (bit 3) and XMP (bit 2) feature flags.
-            data[0] &= !0b0010_1100;
+            // Clear the EXIF (bit 3) and XMP (bit 2) feature flags.
+            data[0] &= !0b0000_1100;
         }
         body.extend_from_slice(&fourcc[..]);
         body.extend_from_slice(&(data.len() as u32).to_le_bytes());

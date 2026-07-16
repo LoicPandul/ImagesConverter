@@ -59,7 +59,8 @@ fn lossy_to_target(
         });
     }
 
-    if let Some(data) = quality_search(image, format, target_bytes)? {
+    // 95 just failed, so the full-size search starts at 94.
+    if let Some(data) = quality_search(image, format, target_bytes, 94)? {
         return Ok(CompressResult {
             data,
             resized_to: None,
@@ -69,7 +70,7 @@ fn lossy_to_target(
 
     for scale in RESIZE_SCALES {
         let smaller = resize(image, scale);
-        if let Some(data) = quality_search(&smaller, format, target_bytes)? {
+        if let Some(data) = quality_search(&smaller, format, target_bytes, 95)? {
             return Ok(CompressResult {
                 data,
                 resized_to: Some((smaller.width(), smaller.height())),
@@ -88,13 +89,14 @@ fn lossy_to_target(
     })
 }
 
-/// Largest quality in 1..=95 that fits the budget.
+/// Largest quality in 1..=high that fits the budget.
 fn quality_search(
     image: &DynamicImage,
     format: TargetFormat,
     target_bytes: u64,
+    high: u8,
 ) -> Result<Option<Vec<u8>>, EngineError> {
-    let (mut low, mut high) = (1u8, 95u8);
+    let (mut low, mut high) = (1u8, high);
     let mut best = None;
     while low <= high {
         let mid = low + (high - low) / 2;
@@ -122,8 +124,10 @@ fn png_to_target(image: &DynamicImage, target_bytes: u64) -> Result<CompressResu
         });
     }
 
+    // The RGBA copy is invariant across tiers — materialize it once.
+    let full_rgba = image.to_rgba8();
     for (min_q, max_q) in PNG_QUALITY_TIERS {
-        if let Some(data) = quantize(image, min_q, max_q)? {
+        if let Some(data) = quantize(&full_rgba, min_q, max_q)? {
             if fits(&data, target_bytes) {
                 return Ok(CompressResult {
                     data,
@@ -134,8 +138,9 @@ fn png_to_target(image: &DynamicImage, target_bytes: u64) -> Result<CompressResu
         }
     }
 
+    drop(full_rgba);
     for scale in RESIZE_SCALES {
-        let smaller = resize(image, scale);
+        let smaller = resize(image, scale).to_rgba8();
         if let Some(data) = quantize(&smaller, 0, 80)? {
             if fits(&data, target_bytes) {
                 return Ok(CompressResult {
@@ -158,11 +163,10 @@ fn png_to_target(image: &DynamicImage, target_bytes: u64) -> Result<CompressResu
 /// Lossy PNG via palette quantization. Returns Ok(None) when the requested
 /// quality floor cannot be met (same semantics as a failing pngquant tier).
 fn quantize(
-    image: &DynamicImage,
+    rgba: &image::RgbaImage,
     min_quality: u8,
     max_quality: u8,
 ) -> Result<Option<Vec<u8>>, EngineError> {
-    let rgba = image.to_rgba8();
     let (width, height) = (rgba.width() as usize, rgba.height() as usize);
 
     let mut attributes = imagequant::new();

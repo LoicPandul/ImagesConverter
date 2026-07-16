@@ -1797,7 +1797,6 @@ dependencies = [
  "rayon",
  "rgb",
  "serde",
- "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

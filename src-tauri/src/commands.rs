@@ -26,7 +26,15 @@ pub struct InspectedFile {
 }
 
 #[tauri::command]
-pub fn inspect_files(paths: Vec<String>) -> Vec<InspectedFile> {
+pub async fn inspect_files(paths: Vec<String>) -> Result<Vec<InspectedFile>, String> {
+    // fs::metadata can stall on network shares / spun-down drives; keep the
+    // event loop free.
+    tauri::async_runtime::spawn_blocking(move || inspect_files_blocking(paths))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn inspect_files_blocking(paths: Vec<String>) -> Vec<InspectedFile> {
     paths
         .into_iter()
         .map(|path| {

@@ -95,6 +95,47 @@ fn jpeg_with_exif(path: &Path, image: &DynamicImage, orientation: u16) {
     fs::write(path, out).unwrap();
 }
 
+/// A JPEG with an APP2 ICC profile segment.
+fn jpeg_with_icc(path: &Path, image: &DynamicImage) {
+    let mut plain = Vec::new();
+    image
+        .to_rgb8()
+        .write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(
+            &mut plain, 90,
+        ))
+        .unwrap();
+    let mut payload: Vec<u8> = Vec::new();
+    payload.extend_from_slice(b"ICC_PROFILE\0");
+    payload.extend_from_slice(&[1, 1]); // sequence 1 of 1
+    payload.extend_from_slice(&[0xAB; 16]); // fake profile data
+    let mut out = Vec::new();
+    out.extend_from_slice(&plain[0..2]);
+    out.extend_from_slice(&[0xFF, 0xE2]);
+    out.extend_from_slice(&((payload.len() + 2) as u16).to_be_bytes());
+    out.extend_from_slice(&payload);
+    out.extend_from_slice(&plain[2..]);
+    fs::write(path, out).unwrap();
+}
+
+/// Insert a PNG chunk right after IHDR (offset 33).
+fn png_with_chunk(base: &[u8], chunk_type: &[u8; 4], data: &[u8]) -> Vec<u8> {
+    let mut chunk: Vec<u8> = Vec::new();
+    chunk.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    chunk.extend_from_slice(chunk_type);
+    chunk.extend_from_slice(data);
+    let crc = {
+        let mut hasher = crc32fast::Hasher::new();
+        hasher.update(chunk_type);
+        hasher.update(data);
+        hasher.finalize()
+    };
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    let mut out = base[..33].to_vec();
+    out.extend_from_slice(&chunk);
+    out.extend_from_slice(&base[33..]);
+    out
+}
+
 fn read_orientation(path: &Path) -> Option<u32> {
     let bytes = fs::read(path).ok()?;
     let exif = exif::Reader::new()
@@ -281,6 +322,84 @@ fn clean_png_drops_text_chunks_losslessly() {
     );
 }
 
+#[test]
+fn icc_profile_survives_clean() {
+    let dir = scratch();
+    let src = dir.join("p3.jpg");
+    jpeg_with_icc(&src, &DynamicImage::ImageRgb8(photo(80, 60)));
+
+    let outcome = process_file(&src, &opts(TargetFormat::Jpeg, None, true)).unwrap();
+
+    assert!(outcome.lossless);
+    let cleaned = fs::read(&src).unwrap();
+    assert!(
+        cleaned.windows(11).any(|w| w == b"ICC_PROFILE"),
+        "ICC color profile is rendering data and must survive the clean"
+    );
+}
+
+#[test]
+fn animated_gif_is_refused() {
+    use image::codecs::gif::GifEncoder;
+    use image::{Delay, Frame};
+    let dir = scratch();
+    let src = dir.join("anim.gif");
+    {
+        let file = fs::File::create(&src).unwrap();
+        let mut encoder = GifEncoder::new(file);
+        let delay = Delay::from_numer_denom_ms(100, 1);
+        let f1 = RgbaImage::from_pixel(16, 16, Rgba([255, 0, 0, 255]));
+        let f2 = RgbaImage::from_pixel(16, 16, Rgba([0, 255, 0, 255]));
+        encoder
+            .encode_frames(vec![
+                Frame::from_parts(f1, 0, 0, delay),
+                Frame::from_parts(f2, 0, 0, delay),
+            ])
+            .unwrap();
+    }
+
+    let err = process_file(&src, &opts(TargetFormat::Webp, None, true)).unwrap_err();
+    assert!(matches!(err, EngineError::Animated));
+    assert!(src.exists(), "refused file must be left untouched");
+}
+
+#[test]
+fn animated_png_is_refused() {
+    let dir = scratch();
+    let src = dir.join("anim.png");
+    let mut base = Vec::new();
+    DynamicImage::ImageRgb8(photo(16, 16))
+        .write_with_encoder(image::codecs::png::PngEncoder::new(&mut base))
+        .unwrap();
+    // acTL: 2 frames, 0 plays.
+    let mut actl = Vec::new();
+    actl.extend_from_slice(&2u32.to_be_bytes());
+    actl.extend_from_slice(&0u32.to_be_bytes());
+    fs::write(&src, png_with_chunk(&base, b"acTL", &actl)).unwrap();
+
+    let err = process_file(&src, &opts(TargetFormat::Png, None, true)).unwrap_err();
+    assert!(matches!(err, EngineError::Animated));
+    assert!(src.exists());
+}
+
+#[test]
+fn mislabeled_extension_gets_normalized() {
+    let dir = scratch();
+    // JPEG bytes saved under a .png name.
+    let src = dir.join("photo.png");
+    write_jpeg(&src, &DynamicImage::ImageRgb8(photo(60, 40)));
+
+    let outcome = process_file(&src, &opts(TargetFormat::Jpeg, None, true)).unwrap();
+
+    assert_eq!(outcome.action, Action::Cleaned);
+    assert_eq!(
+        outcome.out_path,
+        dir.join("photo.jpeg"),
+        "mislabeled files must come out with the right extension"
+    );
+    assert!(!src.exists());
+}
+
 // ---------- compression ----------
 
 #[test]
@@ -346,6 +465,54 @@ fn unreachable_target_reports_warning() {
 
     let outcome = process_file(&src, &opts(TargetFormat::Png, Some(1), false)).unwrap();
     assert!(outcome.warning.is_some());
+    assert!(outcome.out_path.exists());
+}
+
+#[test]
+fn already_under_budget_is_cleaned_not_recompressed() {
+    let dir = scratch();
+    let src = dir.join("small.jpg");
+    write_jpeg(&src, &DynamicImage::ImageRgb8(photo(400, 300)));
+    let original_size = size_of(&src);
+    let budget_kb = original_size / 1024 + 500; // comfortably above
+
+    let outcome = process_file(&src, &opts(TargetFormat::Jpeg, Some(budget_kb), true)).unwrap();
+
+    assert_eq!(
+        outcome.action,
+        Action::Cleaned,
+        "a file already under budget must not be re-encoded"
+    );
+    assert!(outcome.lossless);
+    assert!(size_of(&src) <= original_size);
+}
+
+#[test]
+fn unreachable_target_never_deletes_original() {
+    let dir = scratch();
+    let src = dir.join("noise.png");
+    let mut state: u32 = 0x9E37_79B9;
+    let mut noise = || {
+        state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        (state >> 24) as u8
+    };
+    let mut raw = Vec::with_capacity(400 * 400 * 4);
+    for _ in 0..400 * 400 {
+        raw.extend_from_slice(&[noise(), noise(), noise(), 255]);
+    }
+    write_png(
+        &src,
+        &DynamicImage::ImageRgba8(RgbaImage::from_raw(400, 400, raw).unwrap()),
+    );
+
+    let outcome = process_file(&src, &opts(TargetFormat::Png, Some(1), true)).unwrap();
+
+    assert!(outcome.warning.is_some());
+    assert!(
+        src.exists(),
+        "a best-effort result that missed the budget must never replace the original"
+    );
+    assert_ne!(outcome.out_path, src);
     assert!(outcome.out_path.exists());
 }
 
