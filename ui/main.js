@@ -22,6 +22,15 @@ const els = {
   compress: $("compress"),
   maxKb: $("max-kb"),
   deleteOriginal: $("delete-original"),
+  removeBg: $("remove-bg"),
+  bgHint: $("bg-hint"),
+  bgSetup: $("bg-setup"),
+  bgSetupSize: $("bg-setup-size"),
+  bgDownload: $("bg-download"),
+  bgCancelSetup: $("bg-cancel-setup"),
+  bgProgress: $("bg-progress"),
+  bgProgressFill: $("bg-progress-fill"),
+  bgProgressText: $("bg-progress-text"),
   segThumb: document.querySelector(".segment-thumb"),
 };
 
@@ -30,6 +39,9 @@ const EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff"];
 /** path -> item {path,name,size,ext,supported,status,el,...} */
 const items = new Map();
 let converting = false;
+/** Background-removal assets (runtime + model) present on disk. */
+let bgReady = false;
+let bgInstalling = false;
 
 /* ---------- helpers ---------- */
 
@@ -70,6 +82,7 @@ function currentOptions() {
     format: currentFormat(),
     maxSizeKb: compressOn ? (Number.isFinite(kb) && kb > 0 ? kb : 500) : null,
     deleteOriginal: els.deleteOriginal.checked,
+    removeBackground: els.removeBg.checked && !els.removeBg.disabled,
   };
 }
 
@@ -80,6 +93,7 @@ function saveOptions() {
       compress: els.compress.checked,
       maxKb: els.maxKb.value,
       deleteOriginal: els.deleteOriginal.checked,
+      removeBg: els.removeBg.checked,
     }));
   } catch { /* best effort */ }
 }
@@ -100,6 +114,71 @@ function restoreOptions() {
 
 function syncCompressField() {
   els.maxKb.disabled = !els.compress.checked;
+}
+
+/* ---------- background removal ---------- */
+
+function syncBgControl() {
+  const jpeg = currentFormat() === "jpeg";
+  els.removeBg.disabled = jpeg;
+  els.bgHint.hidden = !jpeg;
+  els.bgHint.textContent = jpeg ? "WEBP / PNG only" : "";
+}
+
+function showBgSetup(show) {
+  els.bgSetup.hidden = !show;
+  if (show) els.bgDownload.focus();
+}
+
+async function initBg() {
+  try {
+    const status = await invoke("bg_status");
+    bgReady = status.ready;
+    els.bgSetupSize.textContent = `≈${fmtBytes(status.missingBytes)}`;
+    if (bgReady) {
+      const saved = JSON.parse(localStorage.getItem("options") || "null");
+      if (saved?.removeBg) els.removeBg.checked = true;
+    }
+  } catch { /* feature stays off */ }
+  syncBgControl();
+}
+
+async function installBg() {
+  if (bgInstalling) return;
+  bgInstalling = true;
+  els.bgDownload.disabled = true;
+  els.bgDownload.textContent = "Downloading…";
+  els.bgCancelSetup.hidden = true;
+  els.bgProgress.hidden = false;
+
+  const onEvent = new Channel();
+  onEvent.onmessage = (ev) => {
+    if (ev.type === "progress") {
+      const pct = ev.total ? Math.min(100, (ev.received / ev.total) * 100) : 0;
+      els.bgProgressFill.style.width = `${pct.toFixed(1)}%`;
+      els.bgProgressText.textContent = `${fmtBytes(ev.received)} / ${fmtBytes(ev.total)}`;
+    }
+  };
+
+  try {
+    await invoke("bg_install", { onEvent });
+    bgReady = true;
+    showBgSetup(false);
+    els.removeBg.checked = true;
+    saveOptions();
+    setStatus("Background removal ready", "good");
+    els.removeBg.focus();
+  } catch (e) {
+    els.bgProgressText.textContent = "";
+    setStatus(`Setup failed: ${e}`, "bad");
+    els.bgCancelSetup.hidden = false;
+  } finally {
+    bgInstalling = false;
+    els.bgDownload.disabled = false;
+    els.bgDownload.textContent = "Download";
+    els.bgProgress.hidden = true;
+    els.bgProgressFill.style.width = "0%";
+  }
 }
 
 function moveSegmentThumb() {
@@ -192,6 +271,12 @@ function cardTrail(item) {
   trail.innerHTML = "";
 
   if (item.status === "done" && item.result) {
+    if (item.result.backgroundRemoved) {
+      const chip = document.createElement("span");
+      chip.className = "badge chip";
+      chip.textContent = "no bg";
+      trail.appendChild(chip);
+    }
     const { inBytes, outBytes } = item.result;
     if (inBytes > 0 && outBytes != null) {
       const delta = 1 - outBytes / inBytes;
@@ -261,6 +346,21 @@ function createCard(item, index) {
   item.el = li;
   els.list.appendChild(li);
   renderCard(item);
+}
+
+/// Show the actual cutout (with a checkerboard behind it) once done.
+async function refreshOutputThumb(item) {
+  try {
+    const uri = await invoke("file_thumbnail", { path: item.result.outPath });
+    const thumb = item.el?.querySelector(".thumb");
+    if (!thumb) return;
+    thumb.classList.add("alpha");
+    thumb.innerHTML = "";
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = uri;
+    thumb.appendChild(img);
+  } catch { /* keep the source preview */ }
 }
 
 async function loadThumbnail(item) {
@@ -366,6 +466,7 @@ async function convert() {
         item.message = ev.message || "failed";
       }
       renderCard(item);
+      if (ev.ok && ev.backgroundRemoved) refreshOutputThumb(item);
     } else if (ev.type === "done") {
       finishBatch(ev, batch);
     }
@@ -452,6 +553,7 @@ function wire() {
   document.querySelectorAll('input[name="format"]').forEach((radio) =>
     radio.addEventListener("change", () => {
       moveSegmentThumb();
+      syncBgControl();
       saveOptions();
       if (!converting) {
         const ready = readyItems().length;
@@ -472,6 +574,24 @@ function wire() {
     saveOptions();
   });
   els.deleteOriginal.addEventListener("change", saveOptions);
+
+  // Background removal.
+  els.removeBg.addEventListener("change", () => {
+    if (els.removeBg.checked && !bgReady) {
+      els.removeBg.checked = false;
+      showBgSetup(true);
+      return;
+    }
+    showBgSetup(false);
+    saveOptions();
+    if (!converting) {
+      setStatus(els.removeBg.checked
+        ? "Background removal on — output gets a transparent background"
+        : `Mode: convert to ${currentFormat().toUpperCase()}`);
+    }
+  });
+  els.bgDownload.addEventListener("click", installBg);
+  els.bgCancelSetup.addEventListener("click", () => showBgSetup(false));
 
   // Queue actions.
   els.clearAll.addEventListener("click", () => {
@@ -500,6 +620,7 @@ restoreOptions();
 wire();
 moveSegmentThumb();
 setView();
+initBg();
 setStatus(`Mode: convert to ${currentFormat().toUpperCase()}`);
 // Fonts load async; the thumb depends on final label widths.
 if (document.fonts?.ready) document.fonts.ready.then(moveSegmentThumb);

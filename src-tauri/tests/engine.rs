@@ -27,6 +27,16 @@ fn opts(format: TargetFormat, max_size_kb: Option<u64>, delete_original: bool) -
         format,
         max_size_kb,
         delete_original,
+        remove_background: false,
+    }
+}
+
+fn bg_opts(format: TargetFormat) -> Options {
+    Options {
+        format,
+        max_size_kb: None,
+        delete_original: false,
+        remove_background: true,
     }
 }
 
@@ -398,6 +408,81 @@ fn mislabeled_extension_gets_normalized() {
         "mislabeled files must come out with the right extension"
     );
     assert!(!src.exists());
+}
+
+// ---------- background removal ----------
+
+#[test]
+fn background_removal_to_jpeg_is_refused() {
+    let dir = scratch();
+    let src = dir.join("photo.png");
+    write_png(&src, &DynamicImage::ImageRgb8(photo(32, 32)));
+
+    let err = process_file(&src, &bg_opts(TargetFormat::Jpeg)).unwrap_err();
+    assert!(matches!(err, EngineError::BackgroundNeedsAlpha));
+}
+
+#[test]
+fn background_removal_without_model_fails_cleanly() {
+    let dir = scratch();
+    let src = dir.join("photo.png");
+    write_png(&src, &DynamicImage::ImageRgb8(photo(32, 32)));
+
+    let err = process_file(&src, &bg_opts(TargetFormat::Webp)).unwrap_err();
+    assert!(matches!(err, EngineError::MattingUnavailable));
+    assert!(src.exists(), "source must be untouched");
+}
+
+/// Real-model smoke test. Needs the downloaded assets; run manually with:
+///   IC_BG_DYLIB=...onnxruntime.dll IC_BG_MODEL=...model.onnx cargo test real_model -- --ignored
+#[test]
+#[ignore = "needs the downloaded onnxruntime + BiRefNet model"]
+fn real_model_cuts_white_background() {
+    use imagesconverter_lib::engine::matting;
+    let dylib = std::env::var("IC_BG_DYLIB").expect("set IC_BG_DYLIB");
+    let model = std::env::var("IC_BG_MODEL").expect("set IC_BG_MODEL");
+    matting::init_runtime(Path::new(&dylib)).unwrap();
+    let matting = matting::Matting::load(Path::new(&model)).unwrap();
+
+    // A dark, detailed "subject" centered on a plain white background.
+    let mut img = image::RgbImage::from_pixel(640, 480, image::Rgb([245, 246, 248]));
+    for y in 120..360u32 {
+        for x in 220..420u32 {
+            let shade = 40 + ((x + y) % 60) as u8;
+            img.put_pixel(x, y, image::Rgb([shade, shade / 2, 20]));
+        }
+    }
+    let src = DynamicImage::ImageRgb8(img);
+
+    let t = std::time::Instant::now();
+    let matte = matting.matte(&src).unwrap();
+    eprintln!("matte() took {:?}", t.elapsed());
+    let corner = matte.get_pixel(5, 5).0[0];
+    let center = matte.get_pixel(320, 240).0[0];
+    assert!(
+        corner < 30,
+        "background corner should be cut (got {corner})"
+    );
+    assert!(center > 220, "subject center should be kept (got {center})");
+
+    // Full pipeline: PNG out must actually carry transparency.
+    let dir = scratch();
+    let path = dir.join("subject.png");
+    src.save_with_format(&path, image::ImageFormat::Png)
+        .unwrap();
+    let outcome = imagesconverter_lib::engine::process_file_with(
+        &path,
+        &bg_opts(TargetFormat::Png),
+        Some(&matting),
+    )
+    .unwrap();
+    assert!(outcome.background_removed);
+    let out = image::open(&outcome.out_path).unwrap();
+    assert_eq!(out.get_pixel(5, 5).0[3], 0, "corner must be transparent");
+    assert!(
+        out.get_pixel(320, 240).0[3] > 200,
+        "subject must stay opaque"
+    );
 }
 
 // ---------- compression ----------

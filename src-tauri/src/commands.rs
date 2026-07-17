@@ -1,18 +1,78 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::State;
 
-use crate::engine::{self, Options};
+use crate::assets::{BgAssets, BgAssetsStatus, InstallEvent};
+use crate::engine::{self, matting::Matting, Options};
 
 #[derive(Default)]
 pub struct ConversionState {
     cancel: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
+}
+
+/// Background-removal state: asset store + lazily loaded model.
+pub struct BgState {
+    assets: BgAssets,
+    matting: Mutex<Option<Arc<Matting>>>,
+    installing: AtomicBool,
+}
+
+impl BgState {
+    pub fn new(app_data_dir: std::path::PathBuf) -> Self {
+        Self {
+            assets: BgAssets::new(app_data_dir),
+            matting: Mutex::new(None),
+            installing: AtomicBool::new(false),
+        }
+    }
+
+    /// Load (once) and hand out the model. Errors carry user-readable text.
+    fn matting_handle(&self) -> Result<Arc<Matting>, String> {
+        let mut guard = self.matting.lock().map_err(|_| "model state poisoned")?;
+        if guard.is_none() {
+            if !self.assets.status().ready {
+                return Err(engine::EngineError::MattingUnavailable.to_string());
+            }
+            engine::matting::init_runtime(&self.assets.dylib_path()).map_err(|e| e.to_string())?;
+            let model = Matting::load(&self.assets.model_path()).map_err(|e| e.to_string())?;
+            *guard = Some(Arc::new(model));
+        }
+        Ok(guard.as_ref().unwrap().clone())
+    }
+}
+
+#[tauri::command]
+pub fn bg_status(bg: State<'_, BgState>) -> BgAssetsStatus {
+    bg.assets.status()
+}
+
+#[tauri::command]
+pub async fn bg_install(
+    on_event: Channel<InstallEvent>,
+    bg: State<'_, BgState>,
+) -> Result<(), String> {
+    if bg.installing.swap(true, Ordering::SeqCst) {
+        return Err("an installation is already running".into());
+    }
+    let assets = bg.assets.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        assets.install(|received, total| {
+            let _ = on_event.send(InstallEvent::Progress { received, total });
+        })?;
+        let _ = on_event.send(InstallEvent::Done);
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r: Result<(), String>| r);
+    bg.installing.store(false, Ordering::SeqCst);
+    result
 }
 
 #[derive(Serialize, Clone)]
@@ -91,6 +151,7 @@ pub enum ProgressEvent {
         out_bytes: Option<u64>,
         resized_to: Option<(u32, u32)>,
         lossless: bool,
+        background_removed: bool,
         warning: Option<String>,
     },
     Done {
@@ -107,11 +168,24 @@ pub async fn convert_files(
     options: Options,
     on_event: Channel<ProgressEvent>,
     state: State<'_, ConversionState>,
+    bg: State<'_, BgState>,
 ) -> Result<(), String> {
     if state.running.swap(true, Ordering::SeqCst) {
         return Err("a conversion is already running".into());
     }
     state.cancel.store(false, Ordering::SeqCst);
+
+    let matting = if options.remove_background {
+        match bg.matting_handle() {
+            Ok(model) => Some(model),
+            Err(e) => {
+                state.running.store(false, Ordering::SeqCst);
+                return Err(e);
+            }
+        }
+    } else {
+        None
+    };
 
     let cancel = state.cancel.clone();
     let running = state.running.clone();
@@ -126,38 +200,41 @@ pub async fn convert_files(
                 return;
             }
             let _ = on_event.send(ProgressEvent::Start { path: path.clone() });
-            let event = match engine::process_file(Path::new(path), &options) {
-                Ok(outcome) => {
-                    succeeded.fetch_add(1, Ordering::SeqCst);
-                    ProgressEvent::File {
-                        path: path.clone(),
-                        ok: true,
-                        action: Some(outcome.action),
-                        message: None,
-                        out_path: Some(outcome.out_path.to_string_lossy().into_owned()),
-                        in_bytes: Some(outcome.in_bytes),
-                        out_bytes: Some(outcome.out_bytes),
-                        resized_to: outcome.resized_to,
-                        lossless: outcome.lossless,
-                        warning: outcome.warning,
+            let event =
+                match engine::process_file_with(Path::new(path), &options, matting.as_deref()) {
+                    Ok(outcome) => {
+                        succeeded.fetch_add(1, Ordering::SeqCst);
+                        ProgressEvent::File {
+                            path: path.clone(),
+                            ok: true,
+                            action: Some(outcome.action),
+                            message: None,
+                            out_path: Some(outcome.out_path.to_string_lossy().into_owned()),
+                            in_bytes: Some(outcome.in_bytes),
+                            out_bytes: Some(outcome.out_bytes),
+                            resized_to: outcome.resized_to,
+                            lossless: outcome.lossless,
+                            background_removed: outcome.background_removed,
+                            warning: outcome.warning,
+                        }
                     }
-                }
-                Err(error) => {
-                    failed.fetch_add(1, Ordering::SeqCst);
-                    ProgressEvent::File {
-                        path: path.clone(),
-                        ok: false,
-                        action: None,
-                        message: Some(error.to_string()),
-                        out_path: None,
-                        in_bytes: None,
-                        out_bytes: None,
-                        resized_to: None,
-                        lossless: false,
-                        warning: None,
+                    Err(error) => {
+                        failed.fetch_add(1, Ordering::SeqCst);
+                        ProgressEvent::File {
+                            path: path.clone(),
+                            ok: false,
+                            action: None,
+                            message: Some(error.to_string()),
+                            out_path: None,
+                            in_bytes: None,
+                            out_bytes: None,
+                            resized_to: None,
+                            lossless: false,
+                            background_removed: false,
+                            warning: None,
+                        }
                     }
-                }
-            };
+                };
             let _ = on_event.send(event);
         });
 
