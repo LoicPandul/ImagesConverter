@@ -104,6 +104,33 @@
         </div>
       </div>
 
+      <div class="opt-group" id="bg-group">
+        <span class="control-label" id="bg-label">Remove background</span>
+        <div class="opt-line">
+          <input type="checkbox" id="remove-bg" class="switch" aria-labelledby="bg-label"
+                 aria-describedby="bg-hint" />
+          <label for="remove-bg" class="switch-track" aria-hidden="true"><span class="switch-dot"></span></label>
+          <span id="bg-hint" class="bg-hint mono" hidden></span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- One-time download of the on-device background-removal model -->
+    <div id="bg-setup" class="bg-setup" hidden>
+      <div class="bg-setup-text">
+        <p class="bg-setup-title">Set up background removal</p>
+        <p class="bg-setup-sub">One-time download of the on-device AI model
+          (<span id="bg-setup-size" class="mono"></span>). Everything runs locally afterwards — images never leave your machine.</p>
+      </div>
+      <div class="bg-setup-actions">
+        <div class="bg-progress" id="bg-progress" hidden aria-hidden="true">
+          <span class="bg-progress-fill" id="bg-progress-fill"></span>
+        </div>
+        <span id="bg-progress-text" class="mono bg-progress-label" role="status" aria-live="polite"></span>
+        <button id="bg-download" class="setup-btn" type="button">Download</button>
+        <button id="bg-cancel-setup" class="ghost-btn" type="button">Not now</button>
+      </div>
     </div>
 
     <div class="action-row">

@@ -1,6 +1,6 @@
 [package]
 name = "imagesconverter"
-version = "2.0.0"
+version = "2.1.0"
 description = "Convert, compress and clean metadata from images"
 authors = ["Loïc Morel"]
 edition = "2021"
@@ -26,6 +26,14 @@ rgb = "0.8"
 png = "0.17"
 kamadak-exif = "0.6"
 rayon = "1"
+ort = { version = "=2.0.0-rc.9", default-features = false, features = ["load-dynamic", "ndarray", "half"] }
+ndarray = "0.16"
+half = "2"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+sha2 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1"
 base64 = "0.22"
 
 [dev-dependencies]

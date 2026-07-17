@@ -4,6 +4,7 @@
 mod compress;
 mod decode;
 mod encode;
+pub mod matting;
 mod strip;
 
 use std::ffi::OsStr;
@@ -70,6 +71,10 @@ pub struct Options {
     #[serde(default)]
     pub max_size_kb: Option<u64>,
     pub delete_original: bool,
+    /// Cut the background out (transparent). Needs an alpha-capable target,
+    /// so JPEG is refused. Off by default.
+    #[serde(default)]
+    pub remove_background: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize)]
@@ -94,6 +99,7 @@ pub struct Outcome {
     pub resized_to: Option<(u32, u32)>,
     /// True when metadata was removed without re-encoding pixels.
     pub lossless: bool,
+    pub background_removed: bool,
     pub warning: Option<String>,
 }
 
@@ -102,6 +108,9 @@ pub enum EngineError {
     Unsupported(String),
     Animated,
     JpegTransparency,
+    BackgroundNeedsAlpha,
+    MattingUnavailable,
+    Matting(String),
     Io(io::Error),
     Decode(String),
     Encode(String),
@@ -121,6 +130,13 @@ impl fmt::Display for EngineError {
             EngineError::JpegTransparency => {
                 write!(f, "image contains transparency, JPEG does not support it")
             }
+            EngineError::BackgroundNeedsAlpha => {
+                write!(f, "background removal needs WEBP or PNG as target")
+            }
+            EngineError::MattingUnavailable => {
+                write!(f, "background removal model is not installed")
+            }
+            EngineError::Matting(e) => write!(f, "background removal failed: {e}"),
             EngineError::Io(e) => write!(f, "file error: {e}"),
             EngineError::Decode(e) => write!(f, "could not read image: {e}"),
             EngineError::Encode(e) => write!(f, "could not encode image: {e}"),
@@ -138,6 +154,16 @@ impl From<io::Error> for EngineError {
 
 /// Convert / compress / clean a single file according to `opts`.
 pub fn process_file(path: &Path, opts: &Options) -> Result<Outcome, EngineError> {
+    process_file_with(path, opts, None)
+}
+
+/// Same as [`process_file`], with the background-removal model available
+/// when `opts.remove_background` is on.
+pub fn process_file_with(
+    path: &Path,
+    opts: &Options,
+    matting: Option<&matting::Matting>,
+) -> Result<Outcome, EngineError> {
     let ext = path
         .extension()
         .and_then(OsStr::to_str)
@@ -145,6 +171,9 @@ pub fn process_file(path: &Path, opts: &Options) -> Result<Outcome, EngineError>
         .unwrap_or_default();
     if !is_supported_extension(&ext) {
         return Err(EngineError::Unsupported(ext));
+    }
+    if opts.remove_background && opts.format == TargetFormat::Jpeg {
+        return Err(EngineError::BackgroundNeedsAlpha);
     }
 
     let bytes = fs::read(path)?;
@@ -163,15 +192,30 @@ pub fn process_file(path: &Path, opts: &Options) -> Result<Outcome, EngineError>
     let same_format = opts.format.matches(decoded.format);
     let target_bytes = opts.max_size_kb.map(|kb| kb.saturating_mul(1024));
     let upright = decoded.orientation == 1;
+
+    // Cut the background before any encode decision. The pixels change, so
+    // every lossless shortcut below is disabled in that case.
+    let (working, background_removed) = if opts.remove_background {
+        let model = matting.ok_or(EngineError::MattingUnavailable)?;
+        let matte = model.matte(&decoded.image)?;
+        (
+            image::DynamicImage::ImageRgba8(matting::apply_matte(&decoded.image, &matte)),
+            true,
+        )
+    } else {
+        (decoded.image, false)
+    };
+
     let strip_lossless = || strip::strip_metadata(&bytes, decoded.format);
+    let may_strip = upright && !background_removed;
 
     let (data, action, resized_to, lossless, warning) = match target_bytes {
         // Metadata clean only. When the image needs no rotation, strip
         // metadata without touching the pixels.
-        None if same_format => match upright.then(strip_lossless).flatten() {
+        None if same_format => match may_strip.then(strip_lossless).flatten() {
             Some(data) => (data, Action::Cleaned, None, true, None),
             None => (
-                encode::encode_clean(&decoded.image, opts.format)?,
+                encode::encode_clean(&working, opts.format)?,
                 Action::Cleaned,
                 None,
                 false,
@@ -180,7 +224,7 @@ pub fn process_file(path: &Path, opts: &Options) -> Result<Outcome, EngineError>
         },
         // Plain conversion.
         None => (
-            encode::encode_default(&decoded.image, opts.format)?,
+            encode::encode_default(&working, opts.format)?,
             Action::Converted,
             None,
             false,
@@ -190,13 +234,13 @@ pub fn process_file(path: &Path, opts: &Options) -> Result<Outcome, EngineError>
         // re-encoded (that could grow it and degrade pixels): a lossless
         // metadata strip — which can only shrink the file — is all it needs.
         Some(budget) => {
-            let shortcut = (same_format && in_bytes <= budget && upright)
+            let shortcut = (same_format && in_bytes <= budget && may_strip)
                 .then(strip_lossless)
                 .flatten();
             match shortcut {
                 Some(data) => (data, Action::Cleaned, None, true, None),
                 None => {
-                    let result = compress::to_target_size(&decoded.image, opts.format, budget)?;
+                    let result = compress::to_target_size(&working, opts.format, budget)?;
                     let action = if same_format {
                         Action::Compressed
                     } else {
@@ -219,7 +263,14 @@ pub fn process_file(path: &Path, opts: &Options) -> Result<Outcome, EngineError>
     let delete_original = opts.delete_original && warning.is_none();
 
     let out_bytes = data.len() as u64;
-    let plan = plan_output(path, &ext, opts.format, action, delete_original)?;
+    let plan = plan_output(
+        path,
+        &ext,
+        opts.format,
+        action,
+        delete_original,
+        background_removed,
+    )?;
     let (out_path, in_place) = match plan {
         OutputPlan::InPlace => (path.to_path_buf(), true),
         OutputPlan::Reserved(p) => (p, false),
@@ -238,6 +289,7 @@ pub fn process_file(path: &Path, opts: &Options) -> Result<Outcome, EngineError>
         out_bytes,
         resized_to,
         lossless,
+        background_removed,
         warning,
     })
 }
@@ -274,6 +326,7 @@ fn plan_output(
     format: TargetFormat,
     action: Action,
     delete_original: bool,
+    background_removed: bool,
 ) -> io::Result<OutputPlan> {
     let dir = path.parent().unwrap_or_else(|| Path::new(""));
     let stem = path.file_stem().and_then(OsStr::to_str).unwrap_or("image");
@@ -286,10 +339,15 @@ fn plan_output(
     let (stem, ext) = if delete_original {
         (stem.to_string(), format.extension())
     } else {
-        let suffix = match action {
-            Action::Converted => "-converted",
-            Action::Compressed => "-compressed",
-            Action::Cleaned => "-clean",
+        // A cutout is named for what it is, whatever branch produced it.
+        let suffix = if background_removed {
+            "-nobg"
+        } else {
+            match action {
+                Action::Converted => "-converted",
+                Action::Compressed => "-compressed",
+                Action::Cleaned => "-clean",
+            }
         };
         let ext = if action != Action::Converted && extension_is_right {
             orig_ext

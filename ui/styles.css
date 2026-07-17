@@ -536,6 +536,83 @@ fieldset.format-control legend { padding: 0; }
 
 .kb-unit { color: var(--text-faint); font-size: 10px; }
 
+.bg-hint { font-size: 10px; color: var(--text-dim); }
+
+.switch:disabled + .switch-track { opacity: 0.4; cursor: not-allowed; }
+
+/* one-time model download panel */
+.bg-setup {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--lime-line);
+  border-radius: 10px;
+  background: var(--lime-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bg-setup-title { margin: 0; font-weight: 650; font-size: 13.5px; }
+
+.bg-setup-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 52ch;
+}
+
+.bg-setup-actions { display: flex; align-items: center; gap: 10px; }
+
+.setup-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 650;
+  background: var(--lime);
+  color: #0d0d0d;
+  transition: filter 150ms, opacity 150ms;
+}
+
+.setup-btn:hover:not(:disabled) { filter: brightness(1.07); }
+.setup-btn:disabled { opacity: 0.55; cursor: default; }
+
+.bg-progress {
+  width: 150px;
+  height: 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.bg-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--lime);
+  border-radius: 6px;
+  transition: width 200ms linear;
+}
+
+.bg-progress-label { font-size: 10px; color: var(--text-dim); }
+
+/* checkerboard behind transparent results */
+.thumb.alpha {
+  background:
+    conic-gradient(rgba(255, 255, 255, 0.10) 0 25%, transparent 0 50%,
+                   rgba(255, 255, 255, 0.10) 0 75%, transparent 0) 0 0 / 12px 12px,
+    var(--bg-raise);
+}
+
+.badge.chip {
+  background: transparent;
+  border: 1px solid var(--lime-line);
+  color: var(--lime);
+  font-weight: 500;
+}
+
 .action-row {
   display: flex;
   align-items: center;
