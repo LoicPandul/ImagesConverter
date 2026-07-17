@@ -41,7 +41,28 @@ fn fits(data: &[u8], target_bytes: u64) -> bool {
 fn resize(image: &DynamicImage, scale: f32) -> DynamicImage {
     let w = ((image.width() as f32 * scale) as u32).max(1);
     let h = ((image.height() as f32 * scale) as u32).max(1);
-    image.resize_exact(w, h, FilterType::Lanczos3)
+    if !image.color().has_alpha() {
+        return image.resize_exact(w, h, FilterType::Lanczos3);
+    }
+    // Straight-alpha resampling bleeds the RGB hidden under transparent
+    // pixels into the visible edges (background-colored halos on cutouts):
+    // premultiply, resize, unpremultiply.
+    let mut rgba = image.to_rgba8();
+    for p in rgba.pixels_mut() {
+        let a = u16::from(p.0[3]);
+        for c in 0..3 {
+            p.0[c] = ((u16::from(p.0[c]) * a) / 255) as u8;
+        }
+    }
+    let mut resized = image::imageops::resize(&rgba, w, h, FilterType::Lanczos3);
+    for p in resized.pixels_mut() {
+        let a = u16::from(p.0[3]);
+        for c in 0..3 {
+            let unpremultiplied = (u16::from(p.0[c]) * 255).checked_div(a).unwrap_or(0);
+            p.0[c] = unpremultiplied.min(255) as u8;
+        }
+    }
+    DynamicImage::ImageRgba8(resized)
 }
 
 fn lossy_to_target(

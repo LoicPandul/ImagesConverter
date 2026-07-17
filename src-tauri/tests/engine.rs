@@ -483,6 +483,22 @@ fn real_model_cuts_white_background() {
         out.get_pixel(320, 240).0[3] > 200,
         "subject must stay opaque"
     );
+    assert!(
+        outcome.out_path.to_string_lossy().ends_with("-nobg.png"),
+        "cutouts kept next to the original are named -nobg"
+    );
+
+    // A subject-less image must be refused, never stretched into a noise
+    // cutout that could replace the user's file.
+    let flat = DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+        512,
+        512,
+        image::Rgb([230, 231, 233]),
+    ));
+    assert!(
+        matting.matte(&flat).is_err(),
+        "uniform image must yield 'no subject detected'"
+    );
 }
 
 // ---------- compression ----------

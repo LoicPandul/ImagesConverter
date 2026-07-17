@@ -20,19 +20,22 @@ const SIDE: u32 = 1024;
 const MEAN: [f32; 3] = [0.5, 0.5, 0.5];
 const STD: [f32; 3] = [1.0, 1.0, 1.0];
 
-/// Point ort at the onnxruntime dynamic library. Process-wide and
-/// idempotent: only the first call performs the initialization.
+/// Point ort at the onnxruntime dynamic library. Process-wide; only the
+/// first successful call initializes, and a failure can be retried (e.g.
+/// after the library has been re-downloaded).
 pub fn init_runtime(dylib: &Path) -> Result<(), EngineError> {
-    static INIT: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
-    let path = dylib.to_string_lossy().into_owned();
-    INIT.get_or_init(|| {
-        ort::init_from(path)
-            .commit()
-            .map(|_| ())
-            .map_err(|e| format!("onnxruntime init: {e}"))
-    })
-    .clone()
-    .map_err(EngineError::Matting)
+    static DONE: Mutex<bool> = Mutex::new(false);
+    let mut done = DONE
+        .lock()
+        .map_err(|_| EngineError::Matting("runtime init state poisoned".into()))?;
+    if *done {
+        return Ok(());
+    }
+    ort::init_from(dylib.to_string_lossy().into_owned())
+        .commit()
+        .map_err(|e| EngineError::Matting(format!("onnxruntime init: {e}")))?;
+    *done = true;
+    Ok(())
 }
 
 /// A loaded background-removal model. `matte` serializes calls: onnxruntime
@@ -63,9 +66,22 @@ impl Matting {
     /// Soft alpha matte at the image's own resolution (0 = background,
     /// 255 = subject).
     pub fn matte(&self, image: &DynamicImage) -> Result<GrayImage, EngineError> {
-        let rgb = image
-            .resize_exact(SIDE, SIDE, FilterType::Triangle)
-            .to_rgb8();
+        let resized = image.resize_exact(SIDE, SIDE, FilterType::Triangle);
+        // Transparent pixels carry arbitrary hidden RGB; composite over
+        // white so the model sees what a human sees.
+        let rgb = if resized.color().has_alpha() {
+            let rgba = resized.to_rgba8();
+            let mut flat = image::RgbImage::new(SIDE, SIDE);
+            for (dst, src) in flat.pixels_mut().zip(rgba.pixels()) {
+                let a = u16::from(src.0[3]);
+                for c in 0..3 {
+                    dst.0[c] = ((u16::from(src.0[c]) * a + 255 * (255 - a)) / 255) as u8;
+                }
+            }
+            flat
+        } else {
+            resized.to_rgb8()
+        };
 
         let side = SIDE as usize;
         let mut input = Array4::<f32>::zeros((1, 3, side, side));
@@ -110,17 +126,27 @@ impl Matting {
             )));
         }
 
-        // Min-max stretch, like the reference ISNet pipeline: the raw map is
-        // in [0, 1] but rarely spans it fully.
         let plane = &matte[..side * side];
         let (mut lo, mut hi) = (f32::MAX, f32::MIN);
         for &v in plane {
             lo = lo.min(v);
             hi = hi.max(v);
         }
-        let range = (hi - lo).max(f32::EPSILON);
+        // No confident foreground anywhere: refuse instead of stretching
+        // model noise into an arbitrary cutout (and possibly replacing the
+        // user's file with it).
+        if hi < 0.5 {
+            return Err(EngineError::Matting("no subject detected".into()));
+        }
+        // Min-max stretch, like the reference ISNet pipeline — but only when
+        // the map actually spans a foreground/background split. A uniformly
+        // confident matte (frame-filling subject) is used raw so no hole
+        // gets punched through it.
+        let range = hi - lo;
+        let stretch = range >= 0.35;
         let small = GrayImage::from_fn(SIDE, SIDE, |x, y| {
-            let v = (matte[y as usize * side + x as usize] - lo) / range;
+            let raw = matte[y as usize * side + x as usize];
+            let v = if stretch { (raw - lo) / range } else { raw };
             Luma([(v.clamp(0.0, 1.0) * 255.0).round() as u8])
         });
         Ok(image::imageops::resize(

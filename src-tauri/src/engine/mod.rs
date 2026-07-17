@@ -263,7 +263,14 @@ pub fn process_file_with(
     let delete_original = opts.delete_original && warning.is_none();
 
     let out_bytes = data.len() as u64;
-    let plan = plan_output(path, &ext, opts.format, action, delete_original)?;
+    let plan = plan_output(
+        path,
+        &ext,
+        opts.format,
+        action,
+        delete_original,
+        background_removed,
+    )?;
     let (out_path, in_place) = match plan {
         OutputPlan::InPlace => (path.to_path_buf(), true),
         OutputPlan::Reserved(p) => (p, false),
@@ -319,6 +326,7 @@ fn plan_output(
     format: TargetFormat,
     action: Action,
     delete_original: bool,
+    background_removed: bool,
 ) -> io::Result<OutputPlan> {
     let dir = path.parent().unwrap_or_else(|| Path::new(""));
     let stem = path.file_stem().and_then(OsStr::to_str).unwrap_or("image");
@@ -331,10 +339,15 @@ fn plan_output(
     let (stem, ext) = if delete_original {
         (stem.to_string(), format.extension())
     } else {
-        let suffix = match action {
-            Action::Converted => "-converted",
-            Action::Compressed => "-compressed",
-            Action::Cleaned => "-clean",
+        // A cutout is named for what it is, whatever branch produced it.
+        let suffix = if background_removed {
+            "-nobg"
+        } else {
+            match action {
+                Action::Converted => "-converted",
+                Action::Compressed => "-compressed",
+                Action::Cleaned => "-clean",
+            }
         };
         let ext = if action != Action::Converted && extension_is_right {
             orig_ext

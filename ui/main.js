@@ -123,6 +123,7 @@ function syncBgControl() {
   els.removeBg.disabled = jpeg;
   els.bgHint.hidden = !jpeg;
   els.bgHint.textContent = jpeg ? "WEBP / PNG only" : "";
+  if (jpeg) showBgSetup(false);
 }
 
 function showBgSetup(show) {
@@ -131,11 +132,12 @@ function showBgSetup(show) {
 }
 
 async function initBg() {
+  els.bgSetupSize.textContent = "≈250 MB";
   try {
     const status = await invoke("bg_status");
     bgReady = status.ready;
-    els.bgSetupSize.textContent = `≈${fmtBytes(status.missingBytes)}`;
-    if (bgReady) {
+    if (!bgReady) els.bgSetupSize.textContent = `≈${fmtBytes(status.missingBytes)}`;
+    if (bgReady && !els.removeBg.disabled) {
       const saved = JSON.parse(localStorage.getItem("options") || "null");
       if (saved?.removeBg) els.removeBg.checked = true;
     }
@@ -164,14 +166,20 @@ async function installBg() {
     await invoke("bg_install", { onEvent });
     bgReady = true;
     showBgSetup(false);
-    els.removeBg.checked = true;
-    saveOptions();
-    setStatus("Background removal ready", "good");
-    els.removeBg.focus();
+    if (!els.removeBg.disabled) {
+      els.removeBg.checked = true;
+      saveOptions();
+      els.removeBg.focus();
+    } else {
+      els.browse.focus();
+    }
+    if (!converting) setStatus("Background removal ready", "good");
   } catch (e) {
-    els.bgProgressText.textContent = "";
-    setStatus(`Setup failed: ${e}`, "bad");
+    // The error lives in the panel: the status line may be owned by a
+    // running conversion.
+    els.bgProgressText.textContent = `failed: ${e}`;
     els.bgCancelSetup.hidden = false;
+    if (!converting) setStatus("Background removal setup failed", "bad");
   } finally {
     bgInstalling = false;
     els.bgDownload.disabled = false;
@@ -350,8 +358,12 @@ function createCard(item, index) {
 
 /// Show the actual cutout (with a checkerboard behind it) once done.
 async function refreshOutputThumb(item) {
+  const requested = item.result?.outPath;
+  if (!requested) return;
   try {
-    const uri = await invoke("file_thumbnail", { path: item.result.outPath });
+    const uri = await invoke("file_thumbnail", { path: requested });
+    // A newer conversion may have landed while the thumbnail was loading.
+    if (item.result?.outPath !== requested) return;
     const thumb = item.el?.querySelector(".thumb");
     if (!thumb) return;
     thumb.classList.add("alpha");
@@ -396,7 +408,10 @@ async function addFiles(paths) {
       if (existing.status !== "converting") {
         existing.status = existing.supported ? "ready" : "error";
         existing.size = info.size;
+        existing.result = null;
+        existing.el?.querySelector(".thumb")?.classList.remove("alpha");
         renderCard(existing);
+        loadThumbnail(existing);
       }
       continue;
     }
@@ -466,7 +481,11 @@ async function convert() {
         item.message = ev.message || "failed";
       }
       renderCard(item);
-      if (ev.ok && ev.backgroundRemoved) refreshOutputThumb(item);
+      if (ev.ok && ev.backgroundRemoved) {
+        refreshOutputThumb(item);
+      } else {
+        item.el?.querySelector(".thumb")?.classList.remove("alpha");
+      }
     } else if (ev.type === "done") {
       finishBatch(ev, batch);
     }
@@ -486,6 +505,9 @@ async function convert() {
       if (i.status === "converting") { i.status = "ready"; renderCard(i); }
     });
     refreshAction();
+    // A failed integrity check removes assets server-side: re-sync so the
+    // toggle offers the download again.
+    initBg();
   }
 }
 
@@ -579,6 +601,10 @@ function wire() {
   els.removeBg.addEventListener("change", () => {
     if (els.removeBg.checked && !bgReady) {
       els.removeBg.checked = false;
+      if (converting) {
+        setStatus("Finish the current batch before setting up background removal");
+        return;
+      }
       showBgSetup(true);
       return;
     }
@@ -591,7 +617,10 @@ function wire() {
     }
   });
   els.bgDownload.addEventListener("click", installBg);
-  els.bgCancelSetup.addEventListener("click", () => showBgSetup(false));
+  els.bgCancelSetup.addEventListener("click", () => {
+    showBgSetup(false);
+    els.removeBg.focus();
+  });
 
   // Queue actions.
   els.clearAll.addEventListener("click", () => {
@@ -619,6 +648,7 @@ function wire() {
 restoreOptions();
 wire();
 moveSegmentThumb();
+syncBgControl();
 setView();
 initBg();
 setStatus(`Mode: convert to ${currentFormat().toUpperCase()}`);

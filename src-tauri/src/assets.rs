@@ -22,10 +22,14 @@ const MODEL_SHA256: &str = "60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fb
 struct RemoteAsset {
     label: &'static str,
     url: String,
+    /// Hash of the downloaded bytes (archive or plain file).
     sha256: &'static str,
     /// Entry to pull out of the downloaded archive (None = plain file).
     archive_entry: Option<String>,
     dest_name: &'static str,
+    /// Hash of the installed artifact, re-checked at load time so a torn
+    /// or tampered file in the user-writable dir is never dlopen'd/parsed.
+    payload_sha256: &'static str,
     download_bytes: u64,
 }
 
@@ -37,6 +41,7 @@ fn runtime_asset() -> RemoteAsset {
         sha256: "174c616efc0271194488642a72f1a514e01487da4dfe84c49296d66e40ebe0da",
         archive_entry: Some("onnxruntime-win-x64-1.22.0/lib/onnxruntime.dll".into()),
         dest_name: "onnxruntime.dll",
+        payload_sha256: "579b636403983254346a5c1d80bd28f1519cd1e284cd204f8d4ff41f8d711559",
         download_bytes: 72_368_545,
     }
 }
@@ -49,6 +54,7 @@ fn runtime_asset() -> RemoteAsset {
         sha256: "8344d55f93d5bc5021ce342db50f62079daf39aaafb5d311a451846228be49b3",
         archive_entry: Some("onnxruntime-linux-x64-1.22.0/lib/libonnxruntime.so.1.22.0".into()),
         dest_name: "libonnxruntime.so",
+        payload_sha256: "3da6146e14e7b8aaec625dde11d6114c7457c87a5f93d744897da8781e35c673",
         download_bytes: 7_798_730,
     }
 }
@@ -63,6 +69,7 @@ fn runtime_asset() -> RemoteAsset {
             "onnxruntime-osx-universal2-1.22.0/lib/libonnxruntime.1.22.0.dylib".into(),
         ),
         dest_name: "libonnxruntime.dylib",
+        payload_sha256: "db045368293215c9d22aa7b8c983d688b3ae9ca1da3f64ffbe01ba7df31c3355",
         download_bytes: 54_820_264,
     }
 }
@@ -74,6 +81,7 @@ fn model_asset() -> RemoteAsset {
         sha256: MODEL_SHA256,
         archive_entry: None,
         dest_name: "isnet-general-use.onnx",
+        payload_sha256: MODEL_SHA256,
         download_bytes: 178_648_008,
     }
 }
@@ -132,6 +140,28 @@ impl BgAssets {
         }
     }
 
+    /// Re-hash the installed artifacts against the pins embedded in the
+    /// binary. A corrupted or tampered file is deleted so the UI offers the
+    /// download again — the repair path for torn installs (power loss) and
+    /// the guard against dlopen'ing a swapped library.
+    pub fn verify_installed(&self) -> Result<(), String> {
+        for asset in [runtime_asset(), model_asset()] {
+            let path = self.dir.join(asset.dest_name);
+            if !path.is_file() {
+                return Err(format!("{} is missing", asset.label));
+            }
+            let actual = sha256_file(&path).map_err(|e| format!("{}: {e}", asset.label))?;
+            if !actual.eq_ignore_ascii_case(asset.payload_sha256) {
+                let _ = fs::remove_file(&path);
+                return Err(format!(
+                    "{} failed integrity check and was removed — download it again",
+                    asset.label
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Download and install whatever is missing. `progress(received, total)`
     /// is called with byte counts across all pending downloads.
     pub fn install(&self, progress: impl Fn(u64, u64)) -> Result<(), String> {
@@ -154,8 +184,14 @@ impl BgAssets {
         let staged = self.dir.join(format!("{}.download", asset.dest_name));
         let dest = self.dir.join(asset.dest_name);
 
-        download_verified(&asset.url, asset.sha256, &staged, &progress)
-            .map_err(|e| format!("{}: {e}", asset.label))?;
+        download_verified(
+            &asset.url,
+            asset.sha256,
+            asset.download_bytes,
+            &staged,
+            &progress,
+        )
+        .map_err(|e| format!("{}: {e}", asset.label))?;
 
         let result = match &asset.archive_entry {
             None => fs::rename(&staged, &dest).map_err(|e| format!("install: {e}")),
@@ -175,10 +211,23 @@ impl BgAssets {
     }
 }
 
-/// Stream the URL to `staged`, hashing on the fly; fail on sha mismatch.
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut file = fs::File::open(path).map_err(|e| format!("open: {e}"))?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher).map_err(|e| format!("read: {e}"))?;
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
+/// Stream the URL to `staged`, hashing on the fly; fail on sha mismatch or
+/// on a body larger than the pinned size.
 fn download_verified(
     url: &str,
     expected_sha256: &str,
+    expected_bytes: u64,
     staged: &Path,
     progress: &impl Fn(u64),
 ) -> Result<(), String> {
@@ -207,8 +256,19 @@ fn download_verified(
             format!("write: {e}")
         })?;
         received += n as u64;
+        // The exact size is pinned along with the hash: a body that keeps
+        // streaming past it can only be wrong, stop before it fills the disk.
+        if received > expected_bytes {
+            let _ = fs::remove_file(staged);
+            return Err(format!(
+                "response larger than the expected {expected_bytes} bytes"
+            ));
+        }
         progress(received);
     }
+    // Flush to disk before the rename: a crash right after install must not
+    // leave a full-length torn file behind.
+    file.sync_all().map_err(|e| format!("write: {e}"))?;
     drop(file);
 
     let digest = hasher.finalize();
@@ -239,6 +299,7 @@ fn extract_entry(archive: &Path, entry: &str, dest: &Path) -> Result<(), String>
             .map_err(|e| format!("zip entry {entry}: {e}"))?;
         let mut out = fs::File::create(dest).map_err(|e| format!("extract: {e}"))?;
         std::io::copy(&mut wanted, &mut out).map_err(|e| format!("extract: {e}"))?;
+        out.sync_all().map_err(|e| format!("extract: {e}"))?;
         return Ok(());
     }
 
@@ -254,6 +315,7 @@ fn extract_entry(archive: &Path, entry: &str, dest: &Path) -> Result<(), String>
         if path == entry {
             let mut out = fs::File::create(dest).map_err(|e| format!("extract: {e}"))?;
             std::io::copy(&mut tar_entry, &mut out).map_err(|e| format!("extract: {e}"))?;
+            out.sync_all().map_err(|e| format!("extract: {e}"))?;
             return Ok(());
         }
     }

@@ -39,6 +39,10 @@ impl BgState {
             if !self.assets.status().ready {
                 return Err(engine::EngineError::MattingUnavailable.to_string());
             }
+            // Never dlopen or parse an unverified file from the writable app
+            // dir: re-hash against the pins (a bad file is deleted so the UI
+            // offers the download again).
+            self.assets.verify_installed()?;
             engine::matting::init_runtime(&self.assets.dylib_path()).map_err(|e| e.to_string())?;
             let model = Matting::load(&self.assets.model_path()).map_err(|e| e.to_string())?;
             *guard = Some(Arc::new(model));
@@ -195,10 +199,7 @@ pub async fn convert_files(
         let succeeded = AtomicUsize::new(0);
         let failed = AtomicUsize::new(0);
 
-        paths.par_iter().for_each(|path| {
-            if cancel.load(Ordering::SeqCst) {
-                return;
-            }
+        let process_one = |path: &String| {
             let _ = on_event.send(ProgressEvent::Start { path: path.clone() });
             let event =
                 match engine::process_file_with(Path::new(path), &options, matting.as_deref()) {
@@ -236,7 +237,25 @@ pub async fn convert_files(
                     }
                 };
             let _ = on_event.send(event);
-        });
+        };
+
+        if matting.is_some() {
+            // Inference serializes on the model session anyway; processing
+            // sequentially keeps Cancel responsive between files.
+            for path in &paths {
+                if cancel.load(Ordering::SeqCst) {
+                    break;
+                }
+                process_one(path);
+            }
+        } else {
+            paths.par_iter().for_each(|path| {
+                if cancel.load(Ordering::SeqCst) {
+                    return;
+                }
+                process_one(path);
+            });
+        }
 
         let done = succeeded.load(Ordering::SeqCst) + failed.load(Ordering::SeqCst);
         let _ = on_event.send(ProgressEvent::Done {
