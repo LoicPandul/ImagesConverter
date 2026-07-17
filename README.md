@@ -34,6 +34,44 @@ Grab the latest installer from the [Releases](https://github.com/LoicPandul/Imag
 - Existing files are never overwritten (a numbered suffix is added instead), and an original is only deleted once its replacement is fully written.
 - Native on Windows, macOS and Linux: a few MB, instant startup. The app never touches the network, with one exception: the explicit background-removal download above.
 
+## Verify your download
+
+Each release ships a `SHA256SUMS` manifest signed with the author's [minisign](https://jedisct1.github.io/minisign/) key. The public key is:
+
+```
+RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
+```
+
+Download `SHA256SUMS` and `SHA256SUMS.minisig` into the same folder as your installer, then run the two checks for your platform: the signature proves the hash list comes from the author, the hash proves your file was not altered.
+
+### Windows (PowerShell)
+
+Get `minisign.exe` from the [official releases](https://github.com/jedisct1/minisign/releases) (win64 zip, `x86_64` folder).
+
+```powershell
+minisign -Vm SHA256SUMS -P RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
+
+$file = "ImagesConverter_2.1.0_x64-setup.exe"   # the file you downloaded
+$hash = (Get-FileHash $file).Hash.ToLower()
+if (Select-String -Quiet -SimpleMatch "$hash  $file" SHA256SUMS) { "OK: $file matches" } else { "MISMATCH - do not run this file" }
+```
+
+### macOS
+
+```sh
+brew install minisign
+minisign -Vm SHA256SUMS -P RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
+shasum -a 256 --check SHA256SUMS --ignore-missing
+```
+
+### Linux
+
+```sh
+sudo apt install minisign   # or your distribution's equivalent
+minisign -Vm SHA256SUMS -P RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
+sha256sum --check SHA256SUMS --ignore-missing
+```
+
 ## Build from source
 
 Requires [Rust](https://rustup.rs/).
