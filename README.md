@@ -29,7 +29,7 @@ Grab the latest installer from the [Releases](https://github.com/LoicPandul/Imag
 - The ICC color profile is deliberately kept. It contains no personal information (it is a generic file shipped with your camera or screen), and removing it would visibly shift the colors of wide-gamut images.
 - To guarantee a precise weight, give a maximum size in KB: the app searches for the best quality that fits, and only downscales as a last resort. Lossy PNG relies on built-in palette quantization, so there is no external tool to install.
 - The EXIF orientation is applied before the metadata is stripped, so rotated phone photos come out upright.
-- Optional background removal, in the spirit of remove.bg but on your machine: an AI model (ISNet) cuts the subject out and the background becomes transparent, for WEBP and PNG targets. Off by default; the first activation downloads the model and its runtime once (~250 MB, checksum-verified), then it runs fully offline. Images never leave your computer.
+- Optional background removal on your machine: an AI model (ISNet) cuts the subject out and the background becomes transparent, for WEBP and PNG targets. Off by default; the first activation downloads the model and its runtime once (~250 MB, checksum-verified), then it runs fully offline. Images never leave your computer.
 - Every file is processed on its own CPU core.
 - Existing files are never overwritten (a numbered suffix is added instead), and an original is only deleted once its replacement is fully written.
 - Native on Windows, macOS and Linux: a few MB, instant startup. The app never touches the network, with one exception: the explicit background-removal download above.
