@@ -1,6 +1,6 @@
 [package]
 name = "imagesconverter"
-version = "2.1.0"
+version = "2.2.0"
 description = "Convert, compress and clean metadata from images"
 authors = ["Loïc Morel"]
 edition = "2021"
