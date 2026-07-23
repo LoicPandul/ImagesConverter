@@ -616,20 +616,85 @@ fieldset.format-control legend { padding: 0; }
 .action-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
 .status-line {
+  flex: 1;
   margin: 0;
   font-size: 12px;
   color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* instant convert toggle — armed = lit bolt.
+   The checkbox is visually hidden the screen-reader-safe way (1px, clipped):
+   zero-sized focusables are skipped by some assistive tech. */
+.instant-check {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.instant-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 180ms var(--ease-snap), border-color 180ms, background 180ms, filter 150ms;
+}
+
+.instant-pill:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.instant-pill svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  transition: fill 180ms, filter 180ms;
+}
+
+.instant-check:checked + .instant-pill {
+  color: var(--lime);
+  border-color: var(--lime-line);
+  background: var(--lime-soft);
+}
+
+.instant-check:checked + .instant-pill:hover { filter: brightness(1.08); }
+
+.instant-check:checked + .instant-pill svg {
+  fill: var(--lime);
+  stroke: var(--lime);
+  filter: drop-shadow(0 0 5px rgba(191, 242, 5, 0.55));
+}
+
+.instant-check:focus-visible + .instant-pill {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
 }
 
 .status-line.good { color: var(--lime); }

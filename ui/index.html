@@ -14,7 +14,7 @@
     <div class="veil-frame">
       <span class="bracket tl"></span><span class="bracket tr"></span>
       <span class="bracket bl"></span><span class="bracket br"></span>
-      <p>Release to add</p>
+      <p id="drag-label">Release to add</p>
     </div>
   </div>
 
@@ -135,6 +135,12 @@
 
     <div class="action-row">
       <p id="status-line" class="status-line" role="status" aria-live="polite">Drop images to get started</p>
+      <input type="checkbox" id="instant" class="instant-check"
+             aria-label="Instant convert — process images the moment they are added" />
+      <label for="instant" class="instant-pill" title="Convert automatically when images are added">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8.7 1.3 2 9.3h6l-.7 5.4L14 6.7H8l.7-5.4z" /></svg>
+        Instant
+      </label>
       <button id="convert" class="convert-btn" type="button" disabled>Convert</button>
     </div>
   </footer>
