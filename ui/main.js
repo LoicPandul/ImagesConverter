@@ -18,6 +18,8 @@ const els = {
   clearAll: $("clear-all"),
   clearDone: $("clear-done"),
   convert: $("convert"),
+  instant: $("instant"),
+  dragLabel: $("drag-label"),
   status: $("status-line"),
   compress: $("compress"),
   maxKb: $("max-kb"),
@@ -94,6 +96,7 @@ function saveOptions() {
       maxKb: els.maxKb.value,
       deleteOriginal: els.deleteOriginal.checked,
       removeBg: els.removeBg.checked,
+      instant: els.instant.checked,
     }));
   } catch { /* best effort */ }
 }
@@ -108,12 +111,35 @@ function restoreOptions() {
     els.compress.checked = !!saved.compress;
     if (/^\d*$/.test(saved.maxKb ?? "")) els.maxKb.value = saved.maxKb ?? "";
     els.deleteOriginal.checked = saved.deleteOriginal !== false;
+    els.instant.checked = !!saved.instant;
   } catch { /* corrupted storage must never brick the app */ }
   syncCompressField();
 }
 
 function syncCompressField() {
   els.maxKb.disabled = !els.compress.checked;
+}
+
+/* ---------- instant convert ---------- */
+
+function instantOn() {
+  return els.instant.checked;
+}
+
+function syncInstantUi() {
+  els.dragLabel.textContent = instantOn() ? "Release to convert" : "Release to add";
+}
+
+/** Idle status line: what will happen next, given the current mode. */
+function idleLine() {
+  const fmt = currentFormat().toUpperCase();
+  return instantOn()
+    ? `Instant convert — images convert to ${fmt} as soon as you add them`
+    : `Mode: convert to ${fmt}`;
+}
+
+function readyLine(ready) {
+  return `${ready} image${ready > 1 ? "s" : ""} ready — ${currentFormat().toUpperCase()}`;
 }
 
 /* ---------- background removal ---------- */
@@ -401,6 +427,7 @@ async function addFiles(paths) {
   }
 
   let index = 0;
+  let armed = 0; // convertible items this add produced or re-armed
   for (const info of inspected) {
     const existing = items.get(info.path);
     if (existing) {
@@ -412,6 +439,7 @@ async function addFiles(paths) {
         existing.el?.querySelector(".thumb")?.classList.remove("alpha");
         renderCard(existing);
         loadThumbnail(existing);
+        if (existing.status === "ready") armed += 1;
       }
       continue;
     }
@@ -429,10 +457,18 @@ async function addFiles(paths) {
     items.set(item.path, item);
     createCard(item, index++);
     loadThumbnail(item);
+    if (item.status === "ready") armed += 1;
   }
   setView();
   const ready = readyItems().length;
-  if (ready) setStatus(`${ready} image${ready > 1 ? "s" : ""} ready — ${currentFormat().toUpperCase()}`);
+  // A conversion may have started while inspect_files was in flight; calling
+  // convert() now would hit its cancel branch and kill that batch.
+  if (!ready || converting) return;
+  // Instant convert: adding images presses Convert for you — but only when
+  // this add actually brought something convertible, so arming the toggle over
+  // a sitting queue keeps its promise of not firing on its own.
+  if (instantOn() && armed) convert();
+  else setStatus(readyLine(ready));
 }
 
 async function browse() {
@@ -579,9 +615,7 @@ function wire() {
       saveOptions();
       if (!converting) {
         const ready = readyItems().length;
-        setStatus(ready
-          ? `${ready} image${ready > 1 ? "s" : ""} ready — ${currentFormat().toUpperCase()}`
-          : `Mode: convert to ${currentFormat().toUpperCase()}`);
+        setStatus(ready ? readyLine(ready) : idleLine());
       }
     })
   );
@@ -596,6 +630,22 @@ function wire() {
     saveOptions();
   });
   els.deleteOriginal.addEventListener("change", saveOptions);
+
+  // Instant convert. Arming it never fires a conversion by itself: only the
+  // next add does — silently converting an already-sitting queue would surprise.
+  els.instant.addEventListener("change", () => {
+    saveOptions();
+    syncInstantUi();
+    if (converting) return;
+    const ready = readyItems().length;
+    if (instantOn()) {
+      setStatus(ready
+        ? `Instant convert on — press Convert to run the ${ready} queued image${ready > 1 ? "s" : ""}`
+        : "Instant convert on — images convert as soon as you add them");
+    } else {
+      setStatus(ready ? readyLine(ready) : idleLine());
+    }
+  });
 
   // Background removal.
   els.removeBg.addEventListener("change", () => {
@@ -613,7 +663,7 @@ function wire() {
     if (!converting) {
       setStatus(els.removeBg.checked
         ? "Background removal on — output gets a transparent background"
-        : `Mode: convert to ${currentFormat().toUpperCase()}`);
+        : idleLine());
     }
   });
   els.bgDownload.addEventListener("click", installBg);
@@ -628,7 +678,7 @@ function wire() {
     items.clear();
     els.list.innerHTML = "";
     setView();
-    setStatus(`Mode: convert to ${currentFormat().toUpperCase()}`);
+    setStatus(idleLine());
     els.browse.focus();
   });
   els.clearDone.addEventListener("click", () => {
@@ -649,8 +699,9 @@ restoreOptions();
 wire();
 moveSegmentThumb();
 syncBgControl();
+syncInstantUi();
 setView();
 initBg();
-setStatus(`Mode: convert to ${currentFormat().toUpperCase()}`);
+setStatus(idleLine());
 // Fonts load async; the thumb depends on final label widths.
 if (document.fonts?.ready) document.fonts.ready.then(moveSegmentThumb);

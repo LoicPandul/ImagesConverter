@@ -25,6 +25,7 @@ Grab the latest installer from the [Releases](https://github.com/LoicPandul/Imag
 ## Features
 
 - Drop files anywhere in the window, or browse, to convert JPEG, PNG, WEBP, GIF, BMP and TIFF images to JPEG, WEBP or PNG.
+- Optional Instant Convert mode: arm the lightning toggle next to the Convert button and images are processed the moment you drop them, no click needed. Off by default, remembered across launches.
 - Metadata is always removed: EXIF, GPS coordinates, XMP, IPTC, comments. When the file is already in the target format, the cleaning is lossless, since the app rewrites the container without re-encoding a single pixel.
 - The ICC color profile is deliberately kept. It contains no personal information (it is a generic file shipped with your camera or screen), and removing it would visibly shift the colors of wide-gamut images.
 - To guarantee a precise weight, give a maximum size in KB: the app searches for the best quality that fits, and only downscales as a last resort. Lossy PNG relies on built-in palette quantization, so there is no external tool to install.
